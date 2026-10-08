@@ -62,6 +62,11 @@ tools/build-iso.sh       builds the ready-to-write ISO
 README.ru.txt            manual setup notes in Russian
 ```
 
+## Credits
+
+Developed with the assistance of [Claude](https://claude.ai) (Anthropic).
+Requirements, design decisions, testing on real hardware and maintenance by the author.
+
 ## License
 
 Scripts: MIT (see `LICENSE`). Release ISOs also contain Debian, whose components are
