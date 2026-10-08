@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.cfg text eol=lf
+live/config-hooks/* text eol=lf
+*.deb binary

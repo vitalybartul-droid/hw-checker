@@ -1,0 +1,29 @@
+#!/bin/sh
+# live-config hook: runs as root at boot when the kernel line has "hooks=medium".
+# Installs hwcheck and makes it start automatically on tty1 after autologin.
+
+M=/run/live/medium/hwcheck
+
+# Keep kernel warnings from printing over the report on the console
+dmesg -n 1 2>/dev/null
+
+# Optional: install .deb packages put into hwcheck/debs/ on the stick
+# (e.g. dmidecode, smartmontools) if the image lacks them.
+if ls "$M"/debs/*.deb >/dev/null 2>&1; then
+  dpkg -i "$M"/debs/*.deb >/dev/null 2>&1 || true
+fi
+
+# Copy the scripts into RAM, fixing Windows line endings if an editor added them
+mkdir -p /usr/local/lib/hwcheck
+for f in "$M"/*.sh; do
+  tr -d '\r' < "$f" > "/usr/local/lib/hwcheck/$(basename "$f")"
+done
+chmod 755 /usr/local/lib/hwcheck/*.sh
+ln -sf /usr/local/lib/hwcheck/hwcheck.sh /usr/local/bin/hwcheck
+
+cat > /etc/profile.d/zz-hwcheck.sh <<'EOF'
+if [ "$(tty)" = /dev/tty1 ] && [ ! -e /tmp/.hwcheck_done ]; then
+  touch /tmp/.hwcheck_done
+  sudo /usr/local/bin/hwcheck
+fi
+EOF
