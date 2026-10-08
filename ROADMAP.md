@@ -3,6 +3,29 @@
 Ideas for next versions, in priority order. All tools below are free and open source
 (GPL or similar), so they can be shipped inside the ISO.
 
+## Smaller ISO (next)
+
+Goal: as small as possible, without losing any hardware information in the report.
+The stick is only for testing hardware, not for using Linux.
+
+Current ISO is ~2.0 GB. What is inside:
+`filesystem.squashfs` 1.28 GB (the live system), Debian installer 0.57 GB
+(`/pool`, `/pool-udeb`, `/install`), kernel + initrd stored twice ~0.12 GB.
+
+1. **Drop the Debian installer** in `tools/build-iso.sh`: remove `/pool`, `/pool-udeb`,
+   `/install` and the installer entries in both boot menus (grub `install_start.cfg` /
+   installer submenu, isolinux `install.cfg`). Result ~1.3 GB. Quick win, no risk.
+2. **Remove the duplicate kernel/initrd** (`vmlinuz` vs `vmlinuz-<ver>`, `initrd.img` vs
+   `initrd.img-<ver>`) and point both menus to one copy. Saves ~0.12 GB.
+3. **Own minimal image with `live-build`** (~0.6–0.8 GB or less): Debian kernel and signed
+   shim/GRUB (Secure Boot keeps working), firmware for GPU/display and all network adapters,
+   all our tools baked in (no `.deb` install at boot, faster start), no docs, man pages,
+   locales or desktop bits.
+   **Keep everything needed for full hardware info**, including networking: Wi-Fi / Bluetooth /
+   LAN / LTE drivers and firmware, `iw`, `ethtool`, `iputils-ping` — the report must show the
+   Wi-Fi standard, bands and all network details. Only things not used for hardware info are cut
+   (NetworkManager GUI bits, desktop, docs, extra locales).
+
 ## Priority 1
 
 - **Disk surface / write test (Victoria-style)** — block-by-block scan with a latency map
