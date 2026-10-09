@@ -42,7 +42,8 @@ echo
 echo "  Legend:  . fast    : ok    = slow    ! very slow    X read error"
 echo
 good=0; ok=0; slow=0; vslow=0; bad=0; col=0; worst=0; badlist=""
-b=0
+niters=$(( (total + step - 1) / step )); [ $niters -lt 1 ] && niters=1
+START=$(date +%s); i=0; b=0
 while [ $b -lt $total ]; do
   t0=$(date +%s%N)
   if dd if="$dev" of=/dev/null bs=1M count=$CHUNK skip=$(( b*CHUNK )) $DIRECT status=none 2>/dev/null; then
@@ -56,9 +57,16 @@ while [ $b -lt $total ]; do
     c='X'; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
   fi
   printf '%s' "$c"
-  col=$((col+1)); [ $col -ge 64 ] && { printf '\n'; col=0; }
+  i=$((i+1)); col=$((col+1))
+  if [ $col -ge 64 ]; then
+    el=$(( $(date +%s) - START )); pct=$(( i*100/niters ))
+    eta=0; [ $i -gt 0 ] && eta=$(( el*(niters-i)/i ))
+    printf '  %3d%%  %02d:%02d<%02d:%02d\n' "$pct" $((el/60)) $((el%60)) $((eta/60)) $((eta%60))
+    col=0
+  fi
   b=$(( b+step ))
 done
+[ $col -gt 0 ] && printf '\n'
 printf '\n\n'
 echo "  SMART after  : $(smart_counts)"
 echo "  Worst read   : ${worst} ms per 32 MiB block"
