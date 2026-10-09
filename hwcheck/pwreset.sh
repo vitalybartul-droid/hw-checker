@@ -8,6 +8,7 @@ export LC_ALL=C
 have(){ command -v "$1" >/dev/null 2>&1; }
 have chntpw || { echo "  chntpw is not on this stick."; echo "  Add chntpw + ntfs-3g .deb to hwcheck/debs/ and rebuild."; read -rsn1 _; exit 1; }
 is_bitlocker(){ dd if="$1" bs=512 count=1 2>/dev/null | grep -qa 'FVE-FS-'; }
+modprobe fuse 2>/dev/null      # ntfs-3g runs on FUSE
 
 echo "  WINDOWS LOCAL PASSWORD RESET"
 echo "  Empties the password of a LOCAL account so you can log in with no password."
