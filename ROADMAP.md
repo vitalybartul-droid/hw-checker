@@ -45,8 +45,9 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   meaningless CPU socket; **Repair/rescue menu (key R)** with:
   - **Surface scan** — read-only block-by-block read with a latency map (fast/slow/bad) and
     SMART reallocated/pending counts; full or quick (~300 points). Write mode will come later.
-  - **File rescue (mc)** — internal partitions mounted read-only, USB drives read-write, then
-    Midnight Commander; BitLocker volumes detected and skipped.
+  - **File rescue (mc)** — auto-mounts internal partitions read-only and USB drives read-write,
+    lists every partition with its type, flags BitLocker volumes, can switch one internal disk to
+    read-write for repair (W), rescan after plugging a USB drive (U); opens mc on the mounts.
   - **Windows password reset** — clears a LOCAL account password (chntpw); Microsoft accounts
     and BitLocker drives detected and refused.
 
@@ -60,6 +61,10 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   (list, delete, create, GPT/MBR conversion) behind a simple menu.
 
 ## Priority 2
+
+- **Network copy in file rescue** — bring up wired (DHCP) / Wi-Fi, add `cifs-utils`/`smbclient`,
+  and a "mount network share" option so files can go straight to the shop NAS (no network stack
+  is started now; hardware is still detected without it).
 
 - **CPU stress test** — `stress-ng` for 5–10 min with live temperature and clock graph,
   to catch overheating and throttling (dirty cooler, dry thermal paste).
