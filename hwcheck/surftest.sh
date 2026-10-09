@@ -25,9 +25,13 @@ echo "    x = cancel"
 read -rsn1 m; echo
 [ "$m" = x ] || [ "$m" = X ] && exit 0
 
-BS=$((32*1024*1024))
-total=$(( sz / BS )); [ $total -lt 1 ] && total=1
-step=1; [ "$m" = q ] || [ "$m" = Q ] && { step=$(( total/300 )); [ $step -lt 1 ] && step=1; }
+CHUNK=32                              # MiB read per sample (done as 1-MiB reads, O_DIRECT-friendly)
+total=$(( sz / (CHUNK*1024*1024) )); [ $total -lt 1 ] && total=1
+step=1; { [ "$m" = q ] || [ "$m" = Q ]; } && { step=$(( total/300 )); [ $step -lt 1 ] && step=1; }
+# Use O_DIRECT (bypass cache = measure the real disk) only if the device actually allows it;
+# some NVMe/USB bridges reject it, so fall back to normal reads instead of flagging every block bad.
+DIRECT=iflag=direct
+dd if="$dev" of=/dev/null bs=1M count=1 iflag=direct status=none 2>/dev/null || DIRECT=""
 
 smart_counts(){ smartctl -A "$dev" 2>/dev/null | awk '
   /Reallocated_Sector_Ct/{r=$NF} /Current_Pending_Sector/{p=$NF} /Offline_Uncorrectable/{u=$NF}
@@ -41,7 +45,7 @@ good=0; ok=0; slow=0; vslow=0; bad=0; col=0; worst=0; badlist=""
 b=0
 while [ $b -lt $total ]; do
   t0=$(date +%s%N)
-  if dd if="$dev" of=/dev/null bs=$BS count=1 skip=$b iflag=direct,nocache status=none 2>/dev/null; then
+  if dd if="$dev" of=/dev/null bs=1M count=$CHUNK skip=$(( b*CHUNK )) $DIRECT status=none 2>/dev/null; then
     t1=$(date +%s%N); ms=$(( (t1-t0)/1000000 ))
     [ $ms -gt $worst ] && worst=$ms
     if   [ $ms -lt 150 ];  then c='.'; good=$((good+1))
@@ -49,7 +53,7 @@ while [ $b -lt $total ]; do
     elif [ $ms -lt 1500 ]; then c='='; slow=$((slow+1))
     else                        c='!'; vslow=$((vslow+1)); fi
   else
-    c='X'; bad=$((bad+1)); badlist="$badlist $(( b*BS/1024/1024/1024 ))G"
+    c='X'; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
   fi
   printf '%s' "$c"
   col=$((col+1)); [ $col -ge 64 ] && { printf '\n'; col=0; }
