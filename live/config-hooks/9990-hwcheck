@@ -8,10 +8,12 @@ M=/run/live/medium/hwcheck
 # Keep kernel warnings from printing over the report on the console
 dmesg -n 1 2>/dev/null
 
-# Optional: install .deb packages put into hwcheck/debs/ on the stick
-# (e.g. dmidecode, smartmontools) if the image lacks them.
+# Add the extra tools from hwcheck/debs/ (mc, ntfs-3g, chntpw, ...).
+# We just unpack the files into the live filesystem instead of "dpkg -i":
+# no dpkg database, no maintainer scripts, no triggers - boots seconds faster.
 if ls "$M"/debs/*.deb >/dev/null 2>&1; then
-  dpkg -i "$M"/debs/*.deb >/dev/null 2>&1 || true
+  for f in "$M"/debs/*.deb; do dpkg-deb -x "$f" / 2>/dev/null; done
+  ldconfig 2>/dev/null                       # refresh the shared-library cache once
 fi
 
 # Copy the scripts into RAM, fixing Windows line endings if an editor added them
