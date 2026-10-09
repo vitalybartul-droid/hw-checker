@@ -71,6 +71,27 @@ for r in R0 R1 R2 R3 R4 R5; do
   [ $ROWEND -gt $maxx ] && maxx=$ROWEND
   i=$((i+1))
 done
+# ---- Font: the largest Terminus size at which the whole layout still fits ----
+# (on HiDPI panels the default console font makes the key labels tiny)
+FONTDIR=/usr/share/consolefonts
+KFONT_SAVED=""
+NEED_ROWS=$(( TOP + 13 + 5 ))                    # layout + status lines
+if [ -t 1 ] && command -v setfont >/dev/null && [ -r /sys/class/graphics/fb0/virtual_size ]; then
+  IFS=, read -r scr_w scr_h < /sys/class/graphics/fb0/virtual_size
+  best=""; best_np=""
+  for f in $(ls "$FONTDIR"/Uni2-TerminusBold*.psf.gz 2>/dev/null | sed -E 's/.*TerminusBold([0-9x]+)\.psf\.gz/\1/' | sort -t x -k1,1n); do
+    fh=${f%%x*}; case $f in *x*) fw=${f#*x} ;; *) fw=8 ;; esac   # "16" = 8x16, "28x14" = 14 wide
+    [ $(( scr_h / fh )) -ge $NEED_ROWS ] || continue
+    [ $(( scr_w / fw )) -ge $(( maxx + 30 )) ] && best_np=$f         # fits with the numpad
+    [ $(( scr_w / fw )) -ge $(( maxx + 2 )) ]  && best=$f            # fits without it
+  done
+  f=${best_np:-$best}                            # prefer showing the numpad over a bigger font
+  if [ -n "$f" ] && setfont -O /tmp/.kbdtest_font 2>/dev/null; then
+    KFONT_SAVED=1
+    setfont "$FONTDIR/Uni2-TerminusBold$f.psf.gz" 2>/dev/null
+  fi
+fi
+
 COLS=$(tput cols 2>/dev/null || echo 80)
 if [ $(( maxx + 30 )) -le "$COLS" ]; then      # numpad only if the screen is wide enough
   i=1
@@ -123,6 +144,7 @@ cleanup() {
   while read -r -s -t 0.1 -n 256 _; do :; done   # drop the keystrokes that piled up
   printf '\e[0m'; tput cnorm
   tput cup $((STATUS+4)) 0
+  [ -n "$KFONT_SAVED" ] && setfont /tmp/.kbdtest_font 2>/dev/null   # back to the report's font size
 }
 trap cleanup EXIT
 trap 'exit' INT TERM

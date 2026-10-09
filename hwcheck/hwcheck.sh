@@ -331,7 +331,7 @@ virt=$(lscpu | sed -n 's/^Virtualization:[[:space:]]*//p' | head -1)
 echo "Virtualization: ${virt:-not reported (disabled in BIOS?)}"
 if have dmidecode; then
   sock=$(dmidecode -t 4 | sed -n 's/^[[:space:]]*Upgrade:[[:space:]]*//p' | head -1)
-  [ -n "$sock" ] && echo "Socket        : $sock"
+  case $sock in ""|Other|Unknown|None) ;; *) echo "Socket        : $sock" ;; esac   # laptops: soldered, says "Other"
 fi
 temp=""
 for h in /sys/class/hwmon/hwmon*; do
@@ -423,13 +423,19 @@ done
 echo "Touchscreen   : $touch"
 ports=$(ls -d /sys/class/drm/card*-* 2>/dev/null | sed 's|.*/card[0-9]*-||' | grep -vE '^(eDP|LVDS|DSI|Writeback)' | sort -u | xargs)
 echo "Video ports   : ${ports:-none}"
-cams=""
+# One line per camera: a USB webcam exposes several video nodes (colour, IR, metadata)
+# whose names are cut to 31 chars, so name it by the USB device instead.
+cams=""; seen=""
 for v in /sys/class/video4linux/video*; do
   [ -e "$v/name" ] || continue
-  cams="$cams$(rd "$v/name")
-"
+  usb=$(readlink -f "$v/device/.." 2>/dev/null)
+  key=${usb:-$v}
+  case " $seen " in *" $key "*) continue ;; esac
+  seen="$seen $key"
+  n=$(rd "$usb/product"); [ -n "$n" ] || n=$(rd "$v/name" | sed 's/: .*//')
+  cat "$usb"/*/interface 2>/dev/null | grep -qiE '(^|[^a-z])ir([^a-z]|$)|infrared' && n="$n + IR camera (Windows Hello)"
+  cams="$cams${cams:+; }$n"
 done
-cams=$(echo "$cams" | sed '/^$/d' | sort -u | head -2 | paste -sd ';' -)
 echo "Webcam        : ${cams:-not found}"
 
 echo; echo "================ DISKS ================"
