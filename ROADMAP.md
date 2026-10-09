@@ -27,6 +27,16 @@ LAN / LTE drivers and firmware, `iw`, `ethtool`, `iputils-ping` — the report m
 Wi-Fi standard, bands and all network details. Only things not used for hardware info are cut
 (NetworkManager GUI bits, desktop, docs, extra locales).
 
+## Next (v1.2) — found while testing v1.1
+
+- **Keyboard test text is too small on HiDPI screens** (key labels hard to read on 3200x2000).
+  `kbdtest.sh` picks the largest Terminus font at which the layout still fits (~115 columns x
+  ~16 rows), like the report's auto-scaling, and restores the report font on exit.
+  No manual +/- inside the test: those keys are being tested.
+- **Webcam line duplicated and truncated** — the camera exposes two USB interfaces; show the
+  device name once.
+- **Hide "Socket: Other"** (meaningless on laptops with soldered CPUs).
+
 ## Priority 1
 
 - **Disk surface / write test (Victoria-style)** — block-by-block scan with a latency map
