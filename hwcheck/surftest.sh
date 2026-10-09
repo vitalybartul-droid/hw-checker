@@ -33,11 +33,28 @@ step=1; { [ "$m" = q ] || [ "$m" = Q ]; } && { step=$(( total/300 )); [ $step -l
 DIRECT=iflag=direct
 dd if="$dev" of=/dev/null bs=1M count=1 iflag=direct status=none 2>/dev/null || DIRECT=""
 
-smart_counts(){ smartctl -A "$dev" 2>/dev/null | awk '
-  /Reallocated_Sector_Ct/{r=$NF} /Current_Pending_Sector/{p=$NF} /Offline_Uncorrectable/{u=$NF}
-  END{printf "realloc=%s pending=%s uncorr=%s", r?r:"n/a", p?p:"n/a", u?u:"n/a"}'; }
+ROT=$(cat "/sys/block/$(basename "$dev")/queue/rotational" 2>/dev/null)   # 1 = spinning HDD
+smart_counts(){                       # NVMe and SATA report health with different fields
+  local a; a=$(smartctl -A "$dev" 2>/dev/null)
+  if echo "$a" | grep -q 'Percentage Used'; then
+    echo "$a" | awk -F: '
+      /Percentage Used/{gsub(/[ %]/,"",$2); u=$2}
+      /Available Spare:/{gsub(/[ %]/,"",$2); s=$2}
+      /Media and Data Integrity Errors/{gsub(/ /,"",$2); m=$2}
+      /Critical Warning/{gsub(/ /,"",$2); w=$2}
+      END{printf "wear=%s%% spare=%s%% media_errors=%s warning=%s", u!=""?u:"?", s!=""?s:"?", m!=""?m:"?", w!=""?w:"?"}'
+  else
+    echo "$a" | awk '
+      /Reallocated_Sector_Ct/{r=$10} /Current_Pending_Sector/{p=$10} /Offline_Uncorrectable/{u=$10}
+      END{printf "realloc=%s pending=%s uncorr=%s", r!=""?r:"n/a", p!=""?p:"n/a", u!=""?u:"n/a"}'
+  fi
+}
+temp_now(){ smartctl -A "$dev" 2>/dev/null | awk '
+  /^Temperature:/{print $2; exit}
+  /Temperature_Celsius|Airflow_Temperature_Cel/{print $10; exit}' | grep -oE '^[0-9]+' | head -1; }
 
-echo "  SMART before : $(smart_counts)"
+sm_before=$(smart_counts); t=$(temp_now); maxt=${t:-0}
+echo "  SMART before : $sm_before${t:+   temp ${t}C}"
 echo
 echo "  Legend:  . fast    : ok    = slow    ! very slow    X read error"
 echo
@@ -61,20 +78,32 @@ while [ $b -lt $total ]; do
   if [ $col -ge 64 ]; then
     el=$(( $(date +%s) - START )); pct=$(( i*100/niters ))
     eta=0; [ $i -gt 0 ] && eta=$(( el*(niters-i)/i ))
-    printf '  %3d%%  %02d:%02d<%02d:%02d\n' "$pct" $((el/60)) $((el%60)) $((eta/60)) $((eta%60))
+    t=$(temp_now); [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
+    printf '  %3d%%  %02d:%02d<%02d:%02d  %s\n' "$pct" $((el/60)) $((el%60)) $((eta/60)) $((eta%60)) "${t:+${t}C}"
     col=0
   fi
   b=$(( b+step ))
 done
 [ $col -gt 0 ] && printf '\n'
 printf '\n\n'
-echo "  SMART after  : $(smart_counts)"
+sm_after=$(smart_counts); t=$(temp_now); [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
+chg=""; [ "$sm_after" != "$sm_before" ] && chg="   <- CHANGED during the scan"
+echo "  SMART after  : $sm_after${t:+   temp ${t}C, max ${maxt}C}$chg"
 echo "  Worst read   : ${worst} ms per 32 MiB block"
 echo "  Blocks       : fast=$good ok=$ok slow=$slow very-slow=$vslow bad=$bad"
 [ -n "$badlist" ] && echo "  Read errors near:$badlist"
-verdict="surface OK"
-{ [ $slow -gt 0 ] || [ $vslow -gt 0 ]; } && verdict="some slow blocks (disk aging or busy)"
-[ $bad -gt 0 ] && verdict="READ ERRORS - disk is failing"
+nslow=$(( slow + vslow ))
+if [ $bad -gt 0 ]; then
+  verdict="READ ERRORS - disk is failing, copy the data off first"
+elif [ $nslow -gt 0 ] && [ "$maxt" -ge 70 ]; then
+  verdict="slow zones while hot (${maxt}C) - likely thermal throttling, not damage"
+elif [ $(( nslow * 100 / niters )) -lt 3 ]; then
+  verdict="surface OK"; [ $nslow -gt 0 ] && verdict="surface OK (a few slow blocks - normal background work)"
+elif [ "$ROT" = 1 ]; then
+  verdict="slow sectors, no errors yet - HDD starting to wear"
+else
+  verdict="slow zones, no errors - SSD reads old data slowly (aged/cheap NAND); repeat: same places = aged data"
+fi
 echo "  Verdict      : $verdict"
 echo "Surface scan ($dev): fast=$good slow=$((slow+vslow)) bad=$bad, worst ${worst}ms - $verdict" >> /tmp/hwcheck.txt
 echo
