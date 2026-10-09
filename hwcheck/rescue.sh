@@ -12,14 +12,16 @@ is_bitlocker(){ dd if="$1" bs=512 count=1 2>/dev/null | grep -qa 'FVE-FS-'; }
 MNT=/mnt/rescue; mkdir -p "$MNT"
 stick=$(lsblk -npo PKNAME "$(findmnt -no SOURCE /run/live/medium 2>/dev/null)" 2>/dev/null | head -1)
 
+writable(){ touch "$1/.hwrw$$" 2>/dev/null && { rm -f "$1/.hwrw$$" 2>/dev/null; return 0; }; return 1; }
 mount_one(){  # $1 dev  $2 fstype  $3 ro|rw  -> prints mountpoint on success
   local dev=$1 fs=$2 mode=$3 mp; mp="$MNT/$(basename "$dev")"; mkdir -p "$mp"
   mountpoint -q "$mp" && umount "$mp" 2>/dev/null
   if [ "$fs" = ntfs ]; then
     if [ "$mode" = rw ]; then
-      mount -t ntfs-3g -o rw,remove_hiberfile "$dev" "$mp" 2>/dev/null || mount -t ntfs3 -o rw "$dev" "$mp" 2>/dev/null
+      # ntfs-3g opens "dirty" NTFS (Fast Startup / pulled drive) read-write; kernel ntfs3 would fall back to ro
+      ntfs-3g -o remove_hiberfile,recover "$dev" "$mp" 2>/dev/null         || mount -t ntfs3 -o rw,force "$dev" "$mp" 2>/dev/null         || mount -t ntfs3 -o ro "$dev" "$mp" 2>/dev/null
     else
-      mount -t ntfs3 -o ro "$dev" "$mp" 2>/dev/null || mount -t ntfs-3g -o ro "$dev" "$mp" 2>/dev/null
+      mount -t ntfs3 -o ro "$dev" "$mp" 2>/dev/null || ntfs-3g -o ro "$dev" "$mp" 2>/dev/null
     fi
   else
     mount -o "$mode" "$dev" "$mp" 2>/dev/null
@@ -45,7 +47,12 @@ scan(){
     fi
     case "$fs" in ntfs|vfat|exfat|ext2|ext3|ext4) ;; *) continue ;; esac
     if [ "$rmv" = 1 ]; then
-      mp=$(mount_one "$dev" "$fs" rw); [ -n "$mp" ] && { TGT+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "USB-rw" "${label:-}"; }
+      mp=$(mount_one "$dev" "$fs" rw)
+      if [ -n "$mp" ] && writable "$mp"; then
+        TGT+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "USB-rw" "${label:-}"
+      elif [ -n "$mp" ]; then
+        TGT+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "USB-ro!" "${label:-} (read-only - safely remove it in Windows first)"
+      fi
     else
       mp=$(mount_one "$dev" "$fs" ro); [ -n "$mp" ] && { SRC+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "ro" "${label:-}"; }
     fi

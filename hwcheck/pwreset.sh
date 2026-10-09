@@ -25,7 +25,7 @@ done < <(lsblk -pnro NAME,FSTYPE 2>/dev/null)
 [ -z "$windev" ] && { echo "  No Windows found (no readable SAM). The drive may be BitLocker-encrypted."; read -rsn1 _; exit 1; }
 
 echo "  Windows system drive: $windev"
-mount -t ntfs-3g -o rw,remove_hiberfile "$windev" "$MNT" 2>/dev/null || mount -t ntfs3 -o rw "$windev" "$MNT" 2>/dev/null || { echo "  Cannot mount read-write."; echo "  NTFS is 'dirty' - in Windows turn off Fast Startup, or shut down fully, then retry."; read -rsn1 _; exit 1; }
+{ ntfs-3g -o remove_hiberfile,recover "$windev" "$MNT" 2>/dev/null || mount -t ntfs3 -o rw,force "$windev" "$MNT" 2>/dev/null; } || { echo "  Cannot mount read-write."; echo "  NTFS is 'dirty' - in Windows turn off Fast Startup, or shut down fully, then retry."; read -rsn1 _; exit 1; }
 cfg="$MNT/Windows/System32/config"
 echo
 echo "  Local accounts on this Windows:"
