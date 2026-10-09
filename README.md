@@ -30,7 +30,7 @@ untouched) plus a set of Bash scripts that start automatically.
 | `V` | Screen: full-screen colours for dead/stuck pixels and backlight bleed |
 | `D` | Disks: read speed + SMART self-test (non-destructive) |
 | `M` | RAM: memtester (quick or full) |
-| `L` | Scroll the report · `+`/`-` text size (auto-scaled on HiDPI) · `Enter` power off |
+| `L` | Scroll the report · `+`/`-` text size (auto-scaled on HiDPI) · `Enter` twice power off |
 
 The plain-text report is kept in `/tmp/hwcheck.txt`.
 

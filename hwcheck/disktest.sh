@@ -1,6 +1,8 @@
 #!/bin/bash
 # disktest.sh — non-destructive disk check: read speed + SMART short self-test.
 # Nothing is written to the disks. Takes ~2-3 minutes per disk.
+# stdout = result lines (hwcheck.sh appends them to the report);
+# stderr = progress and hints, shown on screen only, so the report stays plain text.
 export LC_ALL=C
 [ "$(id -u)" = 0 ] || exec sudo bash "$0" "$@"
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -42,15 +44,15 @@ for d in /sys/block/*; do
     # NVMe prints "No self-test in progress" when idle, so that line must not count as running
     if echo "$st" | grep -i 'in progress' | grep -qvi 'no self-test in progress'; then
       pr=$(echo "$st" | grep -oiE '[0-9]+% (of test remaining|completed)' | head -1)
-      printf '\r\e[K    Self-test   : running... %s (%ds)' "$pr" $(( i * 5 ))
+      printf '\r\e[K    Self-test   : running... %s (%ds)' "$pr" $(( i * 5 )) >&2
     else
       break
     fi
   done
-  printf '\r\e[K'
+  printf '\r\e[K' >&2
   res=$(smartctl -l selftest "/dev/$n" 2>/dev/null | grep -E '^ *#? *[0-9]+ +(Short|Extended|Offline)' | head -1 | sed -E 's/^ *#? *[0-9]+ +//; s/ {2,}/  /g')
   echo "    Self-test   : ${res:-no result (still running or not reported)}"
   h=$(smartctl -H "/dev/$n" 2>/dev/null | sed -nE 's/.*(self-assessment test result|Health Status): *([A-Z]+).*/\2/p' | head -1)
   [ -n "$h" ] && echo "    SMART health: $h"
 done
-echo "  Done. Results were added to /tmp/hwcheck.txt"
+echo "  Done. Results were added to /tmp/hwcheck.txt" >&2

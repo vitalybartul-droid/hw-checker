@@ -1,5 +1,6 @@
 #!/bin/sh
-# live-config hook: runs as root at boot when the kernel line has "hooks=medium".
+# live-config hook: runs as root at boot; the kernel line has
+# "hooks=file:///run/live/medium/live/config-hooks/9990-hwcheck" (added by tools/build-iso.sh).
 # Installs hwcheck and makes it start automatically on tty1 after autologin.
 
 M=/run/live/medium/hwcheck

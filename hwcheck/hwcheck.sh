@@ -504,7 +504,7 @@ lte=0
 for u in /sys/bus/usb/devices/*; do
   [ -f "$u/product" ] || continue
   s="$(rd "$u/manufacturer") $(rd "$u/product")"
-  if echo "$s" | grep -qiE 'modem|lte|wwan|mobile broadband|sierra|quectel|fibocom|telit|ericsson|gobi|em7[0-9]{3}|l8[0-9]{2}-gl'; then
+  if echo "$s" | grep -qiE 'modem|\blte\b|wwan|mobile broadband|sierra|quectel|fibocom|telit|ericsson|gobi|em7[0-9]{3}|l8[0-9]{2}-gl'; then
     echo "  LTE   : $(usbname "$u")"; lte=1
   fi
 done
@@ -614,7 +614,7 @@ summary() {
 show() { clear; colorize "$OUT"; summary; }
 menu() {
   local k=$'\e[1;30;43m' n=$'\e[0m'
-  printf '\n %s Enter %s Power off  %s K %s Keyboard  %s C %s Charger  %s V %s Screen  %s D %s Disks  %s M %s RAM  %s L %s Scroll  %s S %s Shell ' \
+  printf '\n %s Enter x2 %s Power off  %s K %s Keyboard  %s C %s Charger  %s V %s Screen  %s D %s Disks  %s M %s RAM  %s L %s Scroll  %s S %s Shell ' \
     "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n"
   [ ${#FONTS[@]} -gt 0 ] && printf ' %s +/- %s Text size ' "$k" "$n"
 }
@@ -629,14 +629,18 @@ while true; do
   IFS= read -rsn1 k                              # one key, no Enter needed
   echo
   case $k in
-    "")   printf '\n  Powering off...\n'; poweroff; exit ;;
+    "")   # second Enter required: one stray key must not wipe the report (it lives only in RAM)
+          printf '  \e[1;33mPower off? Press Enter again to confirm, any other key to cancel.\e[0m '
+          IFS= read -rsn1 k2; echo
+          if [ -z "$k2" ]; then printf '\n  Powering off...\n'; poweroff; exit; fi
+          show ;;
     k|K)  bash "$T/kbdtest.sh"
           # safety net: make sure the console keyboard is back in normal mode
           kbd_mode -f -u 2>/dev/null || kbd_mode -u 2>/dev/null; stty sane 2>/dev/null
           show ;;
     c|C)  bash "$T/chargetest.sh"; show ;;
     v|V)  bash "$T/screentest.sh"; show ;;
-    d|D)  bash "$T/disktest.sh" 2>&1 | tee -a "$OUT"
+    d|D)  bash "$T/disktest.sh" | tee -a "$OUT"         # stdout = results for the report, stderr = progress (screen only)
           read -rsn1 -p "  Press any key..." _; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
     l|L)  colorize "$OUT" | less -R; show ;;
