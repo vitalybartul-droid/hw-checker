@@ -652,7 +652,7 @@ while true; do
     d|D)  bash "$T/disktest.sh" | tee -a "$OUT"         # stdout = results for the report, stderr = progress (screen only)
           read -rsn1 -p "  Press any key..." _; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
-    l|L)  colorize "$OUT" | less -R; show ;;
+    l|L)  colorize "$OUT" | less -R -P'  Up/Down PgUp/PgDn = scroll     q = back to the report '; show ;;
     +|=)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -lt $(( ${#FONTS[@]} - 1 )) ]; then
             FIDX=$((FIDX+1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the largest size
