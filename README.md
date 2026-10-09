@@ -61,6 +61,8 @@ live/config-hooks/       live-config boot hook: installs the scripts and starts 
 boot/grub/grub.cfg       example patched boot menu for Debian Live 13.7.0
 tools/build-iso.sh       builds the ready-to-write ISO
 README.ru.txt            manual setup notes in Russian
+DEVELOPMENT.md           how to sync, test, build and release (read first)
+ROADMAP.md               planned features
 ```
 
 ## Credits

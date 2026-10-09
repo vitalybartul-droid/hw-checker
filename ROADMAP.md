@@ -38,6 +38,13 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
 - **Windows password reset** — `chntpw`: list local accounts, clear password / unlock / make admin.
   Works for local accounts only (not Microsoft accounts); impossible on BitLocker-encrypted drives
   without the recovery key — detect and say so.
+- **File rescue from a dead Windows (Files menu, key `F`)** — for customer PCs that do not boot:
+  auto-mount all internal partitions (NTFS/FAT/exFAT) **read-only** (safe even with hibernation /
+  Fast Startup), mount inserted USB drives read-write as the target, then open
+  **Midnight Commander (`mc`)** with internal disk on the left and USB drive on the right.
+  Detect BitLocker and say "recovery key needed"; unlock with `dislocker` when the key is given.
+  Note: the hwcheck stick itself is FAT32 (max 4 GB per file) — use an external drive for big files.
+  Optional: copy to a network share (`smbclient` / cifs), `ddrescue` image of a failing disk.
 - **Partition tools** — show and edit partition tables with `parted` / `sfdisk`
   (list, delete, create, GPT/MBR conversion) behind a simple menu.
 
