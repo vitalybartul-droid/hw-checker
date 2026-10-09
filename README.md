@@ -36,7 +36,7 @@ The plain-text report is kept in `/tmp/hwcheck.txt`.
 
 ## Quick start
 
-1. Download the ready ISO from **Releases**, write it with [Rufus](https://rufus.ie) (ISO or DD mode) or `dd`. A 4 GB USB 3.0 stick is enough.
+1. Download the ready ISO from **Releases**, write it with [Rufus](https://rufus.ie) (ISO or DD mode) or `dd`. A 2 GB USB 3.0 stick is enough (the ISO is ~1.4 GB).
 2. Boot the laptop from the stick (F9 HP, F12 Lenovo/Dell, Esc/F8 ASUS).
 
 ### Build the ISO yourself
@@ -46,7 +46,8 @@ tools/build-iso.sh debian-live-13.7.0-amd64-standard.iso
 ```
 
 Takes the official [Debian Live](https://www.debian.org/CD/live/) *standard* ISO,
-adds `hwcheck/` and the boot hook, patches the boot menu, and replays Debian's
+adds `hwcheck/` and the boot hook, patches the boot menu, drops the Debian installer
+(~0.6 GB, not needed on a test stick), and replays Debian's
 boot setup so the hybrid ISO and Secure Boot keep working. Needs `xorriso`.
 
 Ventoy is not recommended: with Secure Boot on it needs its key enrolled on every machine.

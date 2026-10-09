@@ -613,7 +613,7 @@ summary() {
 
 show() { clear; colorize "$OUT"; summary; }
 menu() {
-  local k=$'\e[1;30;43m' n=$'\e[0m'
+  local k=$'\e[0;30;43m' n=$'\e[0m'        # not bold: on the Linux console bold black is grey
   printf '\n %s Enter x2 %s Power off  %s K %s Keyboard  %s C %s Charger  %s V %s Screen  %s D %s Disks  %s M %s RAM  %s L %s Scroll  %s S %s Shell ' \
     "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n"
   [ ${#FONTS[@]} -gt 0 ] && printf ' %s +/- %s Text size ' "$k" "$n"
@@ -624,13 +624,16 @@ if [ ! -t 0 ]; then cat "$OUT"; exit 0; fi
 T=/usr/local/lib/hwcheck                         # installed by the boot hook
 [ -f "$T/kbdtest.sh" ] || T=$(dirname "$(readlink -f "$0")")
 show
+redraw=1
 while true; do
-  menu
+  # Print the menu only after the screen was redrawn: a key that does nothing
+  # (e.g. +/- at the largest/smallest size) must not stack another menu line
+  [ $redraw = 1 ] && menu
+  redraw=1
   IFS= read -rsn1 k                              # one key, no Enter needed
-  echo
   case $k in
     "")   # second Enter required: one stray key must not wipe the report (it lives only in RAM)
-          printf '  \e[1;33mPower off? Press Enter again to confirm, any other key to cancel.\e[0m '
+          printf '\n  \e[1;33mPower off? Press Enter again to confirm, any other key to cancel.\e[0m '
           IFS= read -rsn1 k2; echo
           if [ -z "$k2" ]; then printf '\n  Powering off...\n'; poweroff; exit; fi
           show ;;
@@ -644,9 +647,13 @@ while true; do
           read -rsn1 -p "  Press any key..." _; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
     l|L)  colorize "$OUT" | less -R; show ;;
-    +|=)  [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -lt $(( ${#FONTS[@]} - 1 )) ] && { FIDX=$((FIDX+1)); setfont_idx "$FIDX"; show; } ;;
-    -|_)  [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -gt -1 ] && { FIDX=$((FIDX-1)); setfont_idx "$FIDX"; show; } ;;
+    +|=)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -lt $(( ${#FONTS[@]} - 1 )) ]; then
+            FIDX=$((FIDX+1)); setfont_idx "$FIDX"; show
+          else redraw=0; fi ;;                   # already the largest size
+    -|_)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -gt -1 ]; then
+            FIDX=$((FIDX-1)); setfont_idx "$FIDX"; show
+          else redraw=0; fi ;;                   # already the smallest size
     s|S)  printf '\n  Shell. Type "sudo hwcheck" to come back, "sudo poweroff" to turn off.\n'; exit 0 ;;
-    *)    ;;                                   # ignore other keys
+    *)    redraw=0 ;;                          # ignore other keys, keep the screen as is
   esac
 done

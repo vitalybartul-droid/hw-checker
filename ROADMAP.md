@@ -3,28 +3,29 @@
 Ideas for next versions, in priority order. All tools below are free and open source
 (GPL or similar), so they can be shipped inside the ISO.
 
-## Smaller ISO (next)
+## Smaller ISO
 
 Goal: as small as possible, without losing any hardware information in the report.
 The stick is only for testing hardware, not for using Linux.
 
-Current ISO is ~2.0 GB. What is inside:
-`filesystem.squashfs` 1.28 GB (the live system), Debian installer 0.57 GB
-(`/pool`, `/pool-udeb`, `/install`), kernel + initrd stored twice ~0.12 GB.
+Done in `tools/build-iso.sh` (v1.1): **~2.0 GB → ~1.4 GB**.
+- Debian installer dropped: `/install`, `/pool`, `/pool-udeb`, `/dists`, `/firmware` and the
+  installer entries in both boot menus. All firmware is still there — it lives inside
+  `filesystem.squashfs`, the `/pool` copies were only for the installer.
+- One kernel/initrd copy (`/live/vmlinuz`, `/live/initrd.img`), both menus point to it.
+  (In the Debian ISO the two copies already share data blocks, so this is cleanup, not savings.)
+- `md5sum.txt` / `sha256sum.txt` regenerated, "Verify integrity of the boot medium" works.
+- Legacy BIOS menu now also starts automatically after 1 second.
 
-1. **Drop the Debian installer** in `tools/build-iso.sh`: remove `/pool`, `/pool-udeb`,
-   `/install` and the installer entries in both boot menus (grub `install_start.cfg` /
-   installer submenu, isolinux `install.cfg`). Result ~1.3 GB. Quick win, no risk.
-2. **Remove the duplicate kernel/initrd** (`vmlinuz` vs `vmlinuz-<ver>`, `initrd.img` vs
-   `initrd.img-<ver>`) and point both menus to one copy. Saves ~0.12 GB.
-3. **Own minimal image with `live-build`** (~0.6–0.8 GB or less): Debian kernel and signed
-   shim/GRUB (Secure Boot keeps working), firmware for GPU/display and all network adapters,
-   all our tools baked in (no `.deb` install at boot, faster start), no docs, man pages,
-   locales or desktop bits.
-   **Keep everything needed for full hardware info**, including networking: Wi-Fi / Bluetooth /
-   LAN / LTE drivers and firmware, `iw`, `ethtool`, `iputils-ping` — the report must show the
-   Wi-Fi standard, bands and all network details. Only things not used for hardware info are cut
-   (NetworkManager GUI bits, desktop, docs, extra locales).
+Next step — **own minimal image with `live-build`** (~0.6–0.8 GB or less): Debian kernel and signed
+shim/GRUB (Secure Boot keeps working), firmware for GPU/display and all network adapters,
+all our tools baked in (no `.deb` install at boot, faster start), no docs, man pages,
+locales or desktop bits. Now 1.28 GB of the 1.4 GB is `filesystem.squashfs`, so further
+savings can only come from there.
+**Keep everything needed for full hardware info**, including networking: Wi-Fi / Bluetooth /
+LAN / LTE drivers and firmware, `iw`, `ethtool`, `iputils-ping` — the report must show the
+Wi-Fi standard, bands and all network details. Only things not used for hardware info are cut
+(NetworkManager GUI bits, desktop, docs, extra locales).
 
 ## Priority 1
 
