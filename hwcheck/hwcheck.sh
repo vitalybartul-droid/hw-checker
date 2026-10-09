@@ -620,8 +620,8 @@ summary() {
 show() { clear; colorize "$OUT"; summary; }
 menu() {
   local k=$'\e[0;30;43m' n=$'\e[0m'        # not bold: on the Linux console bold black is grey
-  printf '\n %s Enter x2 %s Power off  %s K %s Keyboard  %s C %s Charger  %s V %s Screen  %s D %s Disks  %s M %s RAM  %s L %s Scroll  %s S %s Shell ' \
-    "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n"
+  printf '\n %s Enter x2 %s Power off  %s K %s Keyboard  %s C %s Charger  %s V %s Screen  %s D %s Disks  %s R %s Repair  %s M %s RAM  %s L %s Scroll  %s S %s Shell ' \
+    "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n"
   [ ${#FONTS[@]} -gt 0 ] && printf ' %s +/- %s Text size ' "$k" "$n"
 }
 
@@ -659,6 +659,7 @@ while true; do
     -|_)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -gt -1 ]; then
             FIDX=$((FIDX-1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the smallest size
+    r|R)  bash "$T/repair.sh"; show ;;
     s|S)  printf '\n  Shell. Type "sudo hwcheck" to come back, "sudo poweroff" to turn off.\n'; exit 0 ;;
     *)    redraw=0 ;;                          # ignore other keys, keep the screen as is
   esac

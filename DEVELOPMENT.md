@@ -20,7 +20,13 @@ read this file first).
 | What | Where | Source |
 |------|-------|--------|
 | Debian Live ISO (`debian-live-13.7.0-amd64-standard.iso`, standard, not gnome) | `Projects/_images/` | cdimage.debian.org → current-live / amd64 / iso-hybrid (older versions: cdimage.debian.org/cdimage/archive/) |
-| Optional `.deb` packages (e.g. `memtester`) for Debian 13 trixie amd64 | `hwcheck/debs/` | packages.debian.org/trixie/<name> → amd64 |
+| `.deb` packages in `hwcheck/debs/` (installed at boot by the hook) | `hwcheck/debs/` | see list below |
+
+Required `.deb` packages for the Repair menu and RAM test (not in the base Debian Live image):
+`mc`, `mc-data`, `chntpw`, `ntfs-3g`, `libntfs-3g89t64`, `fuse3`, `libfuse3-4`, `memtester`.
+ntfs-3g is a fallback — read-only mounts use the kernel `ntfs3` driver, which needs no package.
+Pulled from the Ubuntu pool (built against glibc 2.38, run fine on Debian 13's 2.41):
+`archive.ubuntu.com/ubuntu/pool/{universe/m/mc, universe/c/chntpw, main/n/ntfs-3g, main/f/fuse3}`.
 | Built ISOs | not kept locally | GitHub Releases |
 
 ## Test on a stick (fast loop, no ISO build)

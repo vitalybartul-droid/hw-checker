@@ -34,6 +34,19 @@ untouched) plus a set of Bash scripts that start automatically.
 
 The plain-text report is kept in `/tmp/hwcheck.txt`.
 
+## Repair / rescue tools (key `R`)
+
+For working on **customer** machines (not needed for used-PC intake):
+
+| Key | Tool |
+|-----|------|
+| `S` | Surface scan: read-only block-by-block read with a fast/slow/bad latency map + SMART counts |
+| `F` | File rescue: mounts internal disks **read-only**, USB drives read-write, opens Midnight Commander |
+| `W` | Windows password reset: clears a **local** account password (chntpw) |
+
+BitLocker-encrypted drives are detected and skipped (they need the recovery key).
+Microsoft (online) accounts cannot be reset. Nothing is written during the surface scan.
+
 ## Quick start
 
 1. Download the ready ISO from **Releases**, write it with [Rufus](https://rufus.ie) (ISO or DD mode) or `dd`. A 2 GB USB 3.0 stick is enough (the ISO is ~1.4 GB).

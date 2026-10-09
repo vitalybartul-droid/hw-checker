@@ -37,24 +37,25 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   device name once.
 - **Hide "Socket: Other"** (meaningless on laptops with soldered CPUs).
 
+## Done
+
+- **v1.1** — ISO trimmed to ~1.4 GB; Enter-twice power off; disk-test progress kept out of the
+  report; stricter LTE match; auto-start on legacy BIOS too.
+- **v1.2** — bigger keyboard-test font on HiDPI; webcam shown once per device (+IR); hid
+  meaningless CPU socket; **Repair/rescue menu (key R)** with:
+  - **Surface scan** — read-only block-by-block read with a latency map (fast/slow/bad) and
+    SMART reallocated/pending counts; full or quick (~300 points). Write mode will come later.
+  - **File rescue (mc)** — internal partitions mounted read-only, USB drives read-write, then
+    Midnight Commander; BitLocker volumes detected and skipped.
+  - **Windows password reset** — clears a LOCAL account password (chntpw); Microsoft accounts
+    and BitLocker drives detected and refused.
+
 ## Priority 1
 
-- **Disk surface / write test (Victoria-style)** — block-by-block scan with a latency map
-  (fast / slow / bad blocks), read-only mode by default and an optional **destructive write test**
-  for SSD/HDD that will be wiped anyway. Based on `badblocks` / custom `dd` scan with timing.
-  Write mode must require explicit double confirmation.
+- **Disk surface WRITE test** — optional destructive write/verify pass for disks that will be
+  wiped anyway (badblocks -w or dd), double confirmation + typed word.
 - **Disk cloning (Ghost-style)** — clone disk→disk and disk→image with `partclone`
   (used by Clonezilla), progress display, verify after clone.
-- **Windows password reset** — `chntpw`: list local accounts, clear password / unlock / make admin.
-  Works for local accounts only (not Microsoft accounts); impossible on BitLocker-encrypted drives
-  without the recovery key — detect and say so.
-- **File rescue from a dead Windows (Files menu, key `F`)** — for customer PCs that do not boot:
-  auto-mount all internal partitions (NTFS/FAT/exFAT) **read-only** (safe even with hibernation /
-  Fast Startup), mount inserted USB drives read-write as the target, then open
-  **Midnight Commander (`mc`)** with internal disk on the left and USB drive on the right.
-  Detect BitLocker and say "recovery key needed"; unlock with `dislocker` when the key is given.
-  Note: the hwcheck stick itself is FAT32 (max 4 GB per file) — use an external drive for big files.
-  Optional: copy to a network share (`smbclient` / cifs), `ddrescue` image of a failing disk.
 - **Partition tools** — show and edit partition tables with `parted` / `sfdisk`
   (list, delete, create, GPT/MBR conversion) behind a simple menu.
 
