@@ -59,14 +59,24 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
 
 ## Priority 1
 
-- **Disk surface WRITE test** — optional destructive write/verify pass for disks that will be
-  wiped anyway (badblocks -w or dd), double confirmation + typed word.
+- **Disk WRITE test (destructive, for disks being wiped)** — in `D`, double confirmation + typed word:
+  - write + read-back with checksums over the whole disk: catches disks that read fine but slow down
+    on writing, and **fake capacity** (cheap SSD / flash that reports 1 TB but holds 64 GB and
+    overwrites itself, like H2testw / f3);
+  - Refresh / Remap: rewrite slow or unreadable sectors so the HDD reallocates them.
+- **HPA / DCO check** — one quiet line on the `D` screen, shown only when the visible capacity is
+  smaller than the native one (`hdparm -N`, SATA only).
+- **Random seek ("butterfly") test for HDD** — ~1 min, read-only: head positioning time shows worn
+  mechanics even when sequential reading is fine.
 - **Disk cloning (Ghost-style)** — clone disk→disk and disk→image with `partclone`
   (used by Clonezilla), progress display, verify after clone.
 - **Partition tools** — show and edit partition tables with `parted` / `sfdisk`
   (list, delete, create, GPT/MBR conversion) behind a simple menu.
 
 ## Priority 2
+
+- **BitLocker unlock with the recovery key** in file rescue (`dislocker`) — ~10% of customer disks.
+- **F2 user menu in mc** with ready actions: copy the whole Users folder, collect all documents, collect all photos.
 
 - **Network copy in file rescue** — bring up wired (DHCP) / Wi-Fi, add `cifs-utils`/`smbclient`,
   and a "mount network share" option so files can go straight to the shop NAS (no network stack
