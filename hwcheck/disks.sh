@@ -50,8 +50,9 @@ scan() {
   clear; title "SURFACE SCAN ($1) - $dev $model"
   sm_before=$(smart_line "$dev"); t=$(temp_now "$dev"); maxt=${t:-0}
   echo "  SMART before : $sm_before${t:+   temp ${t}C}"
-  # Colour cells (background colour, no special glyphs: works with any console font)
-  local C_FAST=$'\e[42m \e[0m' C_OK=$'\e[43m \e[0m' C_SLOW=$'\e[41m \e[0m' C_VSLOW=$'\e[41;1;37m!\e[0m' C_BAD=$'\e[47;1;31mX\e[0m'
+  # Colour cells (background colour, no special glyphs: works with any console font).
+  # The console has only dim backgrounds (yellow looks orange); bold+reverse gives a bright yellow cell.
+  local C_FAST=$'\e[42m \e[0m' C_OK=$'\e[1;7;33m \e[0m' C_SLOW=$'\e[41m \e[0m' C_VSLOW=$'\e[41;1;37m!\e[0m' C_BAD=$'\e[47;1;31mX\e[0m'
   printf '  %s scale, each cell = 32 MiB:  %s fast (>%s MB/s)   %s ok (%s-%s)   %s slow (%s-%s)   %s very slow (<%s)   %s unreadable\n' \
     "$CLASS" "$C_FAST" $MB1 "$C_OK" $MB2 $MB1 "$C_SLOW" $MB3 $MB2 "$C_VSLOW" $MB3 "$C_BAD"
   echo "  Ctrl+C = stop"
