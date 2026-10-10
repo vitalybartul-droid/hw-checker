@@ -637,6 +637,7 @@ menu() {
 
 if [ ! -t 0 ]; then cat "$OUT"; exit 0; fi
 
+printf '\e[11;0]' 2>/dev/null                    # console bell length 0: no beeping anywhere
 T=/usr/local/lib/hwcheck                         # installed by the boot hook
 [ -f "$T/kbdtest.sh" ] || T=$(dirname "$(readlink -f "$0")")
 show
@@ -661,7 +662,7 @@ while true; do
     v|V)  bash "$T/screentest.sh"; show ;;
     d|D)  bash "$T/disks.sh"; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
-    l|L)  colorize "$OUT" | less -R -P'  Up/Down PgUp/PgDn = scroll     q = back to the report '; show ;;
+    l|L)  colorize "$OUT" | less -R -Q -P'  Up/Down PgUp/PgDn = scroll     q = back to the report '; show ;;
     +|=)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -lt $(( ${#FONTS[@]} - 1 )) ]; then
             FIDX=$((FIDX+1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the largest size
