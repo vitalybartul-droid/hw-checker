@@ -40,23 +40,31 @@ scan(){
   printf '    %-14s %-7s %-7s %-6s %s\n' DEVICE SIZE FS OPENED LABEL
   while read -r dev type; do
     [ "$type" = part ] && [ -b "$dev" ] || continue
-    local fs size label pk rmv
+    local fs size label pk rmv tran model ext
     fs=$(field "$dev" FSTYPE); size=$(field "$dev" SIZE); label=$(field "$dev" LABEL); pk=$(field "$dev" PKNAME)
     [ "$pk" = "$stick" ] && continue
     rmv=$(cat "/sys/block/$(basename "$pk")/removable" 2>/dev/null)
+    tran=$(lsblk -dno TRAN "$pk" 2>/dev/null | tr -d ' ')
+    model=$(lsblk -dno MODEL "$pk" 2>/dev/null | sed 's/ *$//')
+    # External = USB or removable. USB SSD/HDD enclosures report removable=0, so check TRAN too.
+    ext=0; { [ "$rmv" = 1 ] || [ "$tran" = usb ]; } && ext=1
     if [ "$fs" = BitLocker ] || { [ "$fs" = ntfs ] && is_bitlocker "$dev"; }; then
       printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" BitLck "NO" "${label:-}(needs recovery key)"; continue
     fi
     case "$fs" in ntfs|vfat|exfat|ext2|ext3|ext4) ;; *) continue ;; esac
-    if [ "$rmv" = 1 ]; then
+    if [ $ext = 1 ]; then
       mp=$(mount_one "$dev" "$fs" rw)
-      if [ -n "$mp" ] && writable "$mp"; then
-        TGT+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "USB-rw" "${label:-}"
+      if [ -n "$mp" ] && [ -d "$mp/Windows/System32" ]; then
+        # a customer's system disk on a USB adapter: never a copy target
+        mp=$(mount_one "$dev" "$fs" ro)
+        [ -n "$mp" ] && { SRC+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "ro" "${label:-} [$model] Windows inside - customer disk"; }
+      elif [ -n "$mp" ] && writable "$mp"; then
+        TGT+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "USB-rw" "${label:-} [$model]"
       elif [ -n "$mp" ]; then
         TGT+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "USB-ro!" "${label:-} read-only: run chkdsk on it in Windows (details: /tmp/rescue.log)"
       fi
     else
-      mp=$(mount_one "$dev" "$fs" ro); [ -n "$mp" ] && { SRC+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "ro" "${label:-}"; }
+      mp=$(mount_one "$dev" "$fs" ro); [ -n "$mp" ] && { SRC+=("$mp"); printf '    %-14s %-7s %-7s %-6s %s\n' "$dev" "$size" "$fs" "ro" "${label:-} [$model]"; }
     fi
   done < <(lsblk -pnro NAME,TYPE 2>/dev/null)
 }

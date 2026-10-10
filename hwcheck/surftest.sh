@@ -102,7 +102,7 @@ elif [ $(( nslow * 100 / niters )) -lt 3 ]; then
 elif [ "$ROT" = 1 ]; then
   verdict="slow sectors, no errors yet - HDD starting to wear"
 else
-  verdict="slow zones, no errors - SSD reads old data slowly (aged/cheap NAND); repeat: same places = aged data"
+  verdict="slow zones, no read errors - typical of cheap SSD controllers; scan again: slow in the SAME places = aging data, elsewhere = normal"
 fi
 echo "  Verdict      : $verdict"
 echo "Surface scan ($dev): fast=$good slow=$((slow+vslow)) bad=$bad, worst ${worst}ms - $verdict" >> /tmp/hwcheck.txt
