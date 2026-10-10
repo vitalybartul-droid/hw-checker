@@ -56,6 +56,9 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   SMART self-test), boot stick never offered. RAM test single-key. Repair menu: `F` files,
   `P` password (pick account from a list), `X` shell (moved out of the main menu). File rescue
   opens mc on the Windows partition and skips EFI/Recovery. Screen test: defects picked with digits.
+  Surface scan: colour map of the whole disk on one screen (thresholds per disk type), live speed /
+  temperature / SMART / cable CRC / kernel resets, SMART through USB adapters, disk drop-out detection
+  (hung on a bad sector vs power problem). Test results in their own report section; no beeping.
 
 ## Priority 1
 

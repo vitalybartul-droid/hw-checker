@@ -175,11 +175,17 @@ scan() {
 
   local hung=""
   [ $lost = 1 ] && hung=$(printf '%s\n' "$kl" | sed -n 's/.*I\/O error, dev [^,]*, sector \([0-9]*\).*/\1/p' | head -1)
+  local tmo; tmo=$(printf '%s\n' "$kl" | grep -ciE 'error=-110|timed? ?out')     # disk stopped answering
   if [ $lost = 1 ] && [ -n "$hung" ]; then
     printf '\n  \e[1;37;41m DISK DISCONNECTED: it hung on an unreadable sector at %s GB \e[0m\n' "$(( hung / 2097152 ))"
     echo "  The disk could not read sector $hung, kept retrying (clicking) and the controller/USB adapter"
     echo "  gave up and reset it. This is a failing disk${prebad:+ (SMART already reported:$prebad)}."
     echo "  Copy the data off with care (file rescue / ddrescue), do not trust this disk."
+  elif [ $lost = 1 ] && { [ -n "$prebad" ] || [ "$tmo" -gt 0 ]; }; then
+    printf '\n  \e[1;37;41m DISK HUNG and dropped off at %s GB \e[0m\n' "$(( b*CHUNK/1024 ))"
+    echo "  The disk stopped answering (timeout) and the controller / USB adapter reset it."
+    [ -n "$prebad" ] && echo "  SMART already reported bad sectors before the scan:$prebad - it most likely hung on one of them."
+    echo "  Treat it as a failing disk and copy the data off with care. To rule out power, try another port / SATA."
   elif [ $lost = 1 ]; then
     printf '\n  \e[1;37;41m DISK DISCONNECTED during the scan at %s GB \e[0m\n' "$(( b*CHUNK/1024 ))"
     echo "  The disk vanished without a read error first. Usually: not enough power on the USB port,"
@@ -188,6 +194,9 @@ scan() {
   local nslow=$(( slow + vslow )) verdict
   if [ $lost = 1 ] && [ -n "$hung" ]; then
     verdict="READ ERRORS - disk hung on an unreadable sector at $(( hung / 2097152 )) GB and dropped off - disk is failing, copy the data off first"
+  elif [ $lost = 1 ] && { [ -n "$prebad" ] || [ "$tmo" -gt 0 ]; }; then
+    verdict="DISK HUNG and dropped off${prebad:+ (SMART bad sectors:$prebad)} - most likely failing, copy the data off; rule out power with another port"
+    prebad=""                                   # already in the verdict
   elif [ $lost = 1 ]; then
     verdict="DISK DISCONNECTED during the scan - check power / USB adapter / cable before judging the disk"
   elif [ $bad -gt 0 ]; then

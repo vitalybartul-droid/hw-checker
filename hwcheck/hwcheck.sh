@@ -599,6 +599,7 @@ summary() {
     case $vd in
       *"READ ERRORS"*)             issues+=("$dv: read errors in the surface scan") ;;
       *"bad sectors appearing"*)   issues+=("$dv: bad sectors appeared during the surface scan") ;;
+      *"DISK HUNG"*)               issues+=("$dv: hung and dropped off during the surface scan - likely failing") ;;
       *"DISK DISCONNECTED"*)       warns+=("$dv: disconnected during the scan - check power / USB adapter") ;;
       *"slow sectors"*)            warns+=("$dv: HDD has slow sectors") ;;
     esac
