@@ -4,6 +4,7 @@
 # so a loose DC / USB-C socket shows up immediately. Exit: q or Esc.
 export LC_ALL=C
 [ "$(id -u)" = 0 ] || exec sudo bash "$0" "$@"
+. "$(dirname "$(readlink -f "$0")")/ui.sh"
 
 r()  { cat "$1" 2>/dev/null | head -1; }
 f1() { awk -v x="$1" -v d="$2" 'BEGIN{ if (x=="" || d==0) print ""; else printf "%.1f", x/d }'; }
@@ -228,5 +229,5 @@ bc=$(r "$BAT/cycle_count"); { [ -z "$bc" ] || [ "$bc" = 0 ]; } && bc="n/a"
 res="Charging test: battery health ${bh:-?}%, cycles ${bc:-?}, charger detected $([ "$ever_ac" = 1 ] && echo yes || echo NO), max charge power ${maxchg} W$([ "$maxadp" -gt 0 ] && echo ", USB-C adapter ${maxadp} W"), unplug events ${unplugs}, brief drops ${drops}"
 clear
 echo "  $res"
-echo "$res" >> /tmp/hwcheck.txt
+report_add "$res"
 sleep 1

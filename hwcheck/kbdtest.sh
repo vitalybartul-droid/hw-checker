@@ -5,6 +5,7 @@
 # Yellow = key is held now, green = key worked. Exit: press Esc 3 times in a row.
 export LC_ALL=C
 [ "$(id -u)" = 0 ] || exec sudo bash "$0" "$@"
+. "$(dirname "$(readlink -f "$0")")/ui.sh"
 
 # The console we run on (explicit, so mode changes and restore hit the same VT)
 CON=/dev/tty$(fgconsole 2>/dev/null || echo 1)
@@ -188,6 +189,6 @@ echo "Keyboard test: ${#DONE[@]} of $TOTAL layout keys OK."
 [ -n "$other" ] && echo "Extra keys seen:$other"
 r="Keyboard test: ${#DONE[@]} of $TOTAL layout keys OK"
 [ -n "$miss" ] && r="$r; not pressed:$miss"
-echo "$r" >> /tmp/hwcheck.txt
+report_add "$r"
 read -r -s -n 1 -p "Press any key to return..." _
 echo

@@ -57,7 +57,7 @@ printf '1\nq\ny\n' | chntpw -u "0x$rid" "$cfg/SAM" >/tmp/pwreset.log 2>&1
 sync; umount "$MNT" 2>/dev/null
 if grep -qiE 'written back|hives.*chang' /tmp/pwreset.log; then
   echo "  Done. '$u' now has an empty password: boot Windows and leave the password field blank."
-  echo "Windows password: cleared for '$u' on $windev" >> /tmp/hwcheck.txt
+  report_add "Windows password: cleared for '$u' on $windev"
 else
   echo "  Could not change it. Last lines:"; tail -4 /tmp/pwreset.log
 fi

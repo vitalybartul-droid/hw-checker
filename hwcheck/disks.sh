@@ -193,7 +193,7 @@ scan() {
   fi
   [ -n "$warn" ] && [ $bad -eq 0 ] && verdict="$verdict (but:${warn#;})"
   printf '  Verdict      : \e[1m%s\e[0m\n' "$verdict"
-  echo "Disk check ($1) $dev $model: ${speed:-?} MB/s, fast=$good slow=$nslow bad=$bad, worst ${worst}ms - $verdict" >> "$REPORT"
+  report_add "Disk check ($1) $dev $model: ${speed:-?} MB/s, fast=$good slow=$nslow bad=$bad, worst ${worst}ms - $verdict"
 }
 
 # ---------- SMART short self-test ----------
@@ -216,7 +216,7 @@ selftest() {
   h=$(smartctl $SMARTD -H "$dev" 2>/dev/null | sed -nE 's/.*(self-assessment test result|Health Status): *([A-Z]+).*/\2/p' | head -1)
   echo "  Self-test    : ${res:-no result (still running or not reported)}"
   [ -n "$h" ] && echo "  SMART health : $h"
-  echo "Self-test    : $dev ${res:-no result}${h:+, SMART health $h}" >> "$REPORT"
+  report_add "Self-test    : $dev ${res:-no result}${h:+, SMART health $h}"
 }
 
 while true; do

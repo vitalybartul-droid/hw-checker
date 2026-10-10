@@ -40,5 +40,5 @@ else
   r="RAM test (${size} MB): not finished"
 fi
 echo; echo "  $r"
-echo "$r" >> /tmp/hwcheck.txt
+report_add "$r"
 pause

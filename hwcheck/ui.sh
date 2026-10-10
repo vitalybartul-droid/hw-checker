@@ -105,3 +105,11 @@ smart_vals() {
   echo "$a" | awk '$2=="Reallocated_Sector_Ct"{print "realloc="$10} $2=="Current_Pending_Sector"{print "pending="$10}
                    $2=="Offline_Uncorrectable"{print "uncorr="$10} $2=="UDMA_CRC_Error_Count"{print "cable_crc="$10}'
 }
+
+# Append one test result to the report, under its own TEST RESULTS section
+# (otherwise results would appear glued to the last hardware section, BATTERY).
+report_add() {
+  local f=/tmp/hwcheck.txt
+  grep -q '^=* TEST RESULTS =*$' "$f" 2>/dev/null || printf '\n================ TEST RESULTS ================\n' >> "$f"
+  echo "$1" >> "$f"
+}

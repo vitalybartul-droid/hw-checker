@@ -594,12 +594,17 @@ summary() {
   grep -q 'SMART:.*health FAILED' "$f"               && issues+=("disk SMART health FAILED")
   grep -qE 'media errors [1-9]' "$f"                 && issues+=("disk media errors")
   grep -qE '(realloc|pending|uncorr) [1-9]' "$f"     && warns+=("disk has reallocated/pending sectors")
-  grep -q 'READ ERROR' "$f"                          && issues+=("disk read error")
-  grep -q 'Disk check.*bad sectors appearing' "$f"   && issues+=("disk: bad sectors appeared during the surface scan")
-  grep -q 'Disk check.*CRC errors grew' "$f"         && warns+=("disk cable/adapter errors (CRC) during the scan")
-  grep -q 'Disk check.*kernel disk errors' "$f"      && warns+=("disk resets/errors in the kernel log during the scan")
-  grep -q 'Disk check.*slow sectors' "$f"            && warns+=("HDD has slow sectors")
-  grep -q 'Disk check.*DISK DISCONNECTED' "$f"       && warns+=("disk disconnected during the scan - check power / USB adapter")
+  # Surface scans: only the LATEST result per disk counts (a clean rescan clears an old error)
+  while read -r dv vd; do
+    case $vd in
+      *"READ ERRORS"*)             issues+=("$dv: read errors in the surface scan") ;;
+      *"bad sectors appearing"*)   issues+=("$dv: bad sectors appeared during the surface scan") ;;
+      *"DISK DISCONNECTED"*)       warns+=("$dv: disconnected during the scan - check power / USB adapter") ;;
+      *"slow sectors"*)            warns+=("$dv: HDD has slow sectors") ;;
+    esac
+    case $vd in *"CRC errors grew"*)   warns+=("$dv: cable/adapter (CRC) errors during the scan") ;; esac
+    case $vd in *"kernel disk errors"*) warns+=("$dv: resets/errors in the kernel log during the scan") ;; esac
+  done < <(sed -n 's/^Disk check ([a-z]*) \(\/dev\/[^ ]*\) .*worst [0-9]*ms - \(.*\)$/\1 \2/p' "$f" | awk '{v[$1]=$0} END{for (d in v) print v[d]}')
   grep -qiE 'Self-test *:.*fail' "$f"                && issues+=("disk self-test failed")
   grep -q 'Boot RAM test : !!!' "$f"                 && issues+=("RAM errors at boot test")
   grep -q 'RAM test.*FAILED' "$f"                    && issues+=("RAM test FAILED")

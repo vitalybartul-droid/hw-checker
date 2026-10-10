@@ -101,5 +101,5 @@ for n in $sel; do
 done
 res="Screen test: ${note:-no defects noted}"
 echo "  $res"
-echo "$res" >> /tmp/hwcheck.txt
+report_add "$res"
 sleep 1
