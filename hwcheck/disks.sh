@@ -83,10 +83,13 @@ scan() {
   SB=(); while IFS='=' read -r k d; do SB[$k]=$d; done < <(smart_vals "$dev")
   KBASE=$(dmesg 2>/dev/null | wc -l); DN=$(basename "$dev")
   sm_before=$(smart_line "$dev"); t=$(temp_now "$dev"); maxt=${t:-0}
+  local prebad=""                               # unstable / unreadable sectors known before we start
+  for k in pending uncorr media_errors; do [ "${SB[$k]:-0}" -gt 0 ] 2>/dev/null && prebad="$prebad $k=${SB[$k]}"; done
 
   clear; printf '\e[?25l'                       # hide the cursor while drawing
   title "SURFACE SCAN ($1) - $dev $model${RPM:+, $RPM}"
   echo "  SMART before : $sm_before${t:+   temp ${t}C}"
+  [ -n "$prebad" ] && printf '  \e[1;31m!! The disk already reports bad sectors:%s - expect slow or unreadable spots\e[0m\n' "$prebad"
   printf '  %s scale:  %s fast (>%s MB/s)  %s ok (%s-%s)  %s slow (%s-%s)  %s very slow (<%s)  %s unreadable\n' \
     "$CLASS" "$C_FAST" $MB1 "$C_OK" $MB2 $MB1 "$C_SLOW" $MB3 $MB2 "$C_VSLOW" $MB3 "$C_BAD"
   printf '  Whole disk on one screen: each cell = %s, coloured by its worst block.   \e[1mCtrl+C = stop\e[0m\n' "$cellsz"
@@ -154,6 +157,7 @@ scan() {
   sm_after=$(smart_line "$dev"); t=$(temp_now "$dev"); [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
   d=$(smart_deltas); local kl; kl=$(kern_lines); k=$(printf '%s' "$kl" | grep -c .)
   chg=""; [ "$sm_after" != "$sm_before" ] && chg="   <- CHANGED during the scan"
+  [ $lost = 1 ] && { sm_after="not available (the disk is gone)"; chg=""; }
   echo "  SMART after  : $sm_after${t:+   temp ${t}C, max ${maxt}C}$chg"
   [ -n "$speed" ] && echo "  Read speed   : ${speed} MB/s average   (typical: HDD 60-160, SATA SSD 400-550, NVMe 1500+)"
   echo "  Worst read   : ${worst} ms per 32 MiB block"
@@ -169,14 +173,22 @@ scan() {
     warn="$warn; kernel disk errors $k"
   fi
 
-  if [ $lost = 1 ]; then
+  local hung=""
+  [ $lost = 1 ] && hung=$(printf '%s\n' "$kl" | sed -n 's/.*I\/O error, dev [^,]*, sector \([0-9]*\).*/\1/p' | head -1)
+  if [ $lost = 1 ] && [ -n "$hung" ]; then
+    printf '\n  \e[1;37;41m DISK DISCONNECTED: it hung on an unreadable sector at %s GB \e[0m\n' "$(( hung / 2097152 ))"
+    echo "  The disk could not read sector $hung, kept retrying (clicking) and the controller/USB adapter"
+    echo "  gave up and reset it. This is a failing disk${prebad:+ (SMART already reported:$prebad)}."
+    echo "  Copy the data off with care (file rescue / ddrescue), do not trust this disk."
+  elif [ $lost = 1 ]; then
     printf '\n  \e[1;37;41m DISK DISCONNECTED during the scan at %s GB \e[0m\n' "$(( b*CHUNK/1024 ))"
-    echo "  The disk vanished from the system (often with a click). Usually: not enough power on the USB port,"
-    echo "  a bad USB adapter or cable - not necessarily bad sectors. Try another port, a Y-cable / powered adapter,"
-    echo "  or connect the disk directly by SATA, then scan again."
+    echo "  The disk vanished without a read error first. Usually: not enough power on the USB port,"
+    echo "  a bad USB adapter or cable. Try another port, a Y-cable / powered adapter, or SATA, then scan again."
   fi
   local nslow=$(( slow + vslow )) verdict
-  if [ $lost = 1 ]; then
+  if [ $lost = 1 ] && [ -n "$hung" ]; then
+    verdict="READ ERRORS - disk hung on an unreadable sector at $(( hung / 2097152 )) GB and dropped off - disk is failing, copy the data off first"
+  elif [ $lost = 1 ]; then
     verdict="DISK DISCONNECTED during the scan - check power / USB adapter / cable before judging the disk"
   elif [ $bad -gt 0 ]; then
     verdict="READ ERRORS - disk is failing, copy the data off first"
@@ -191,7 +203,8 @@ scan() {
   else
     verdict="slow zones, no read errors - typical of cheap SSD controllers; scan again: slow in the SAME places = aging data, elsewhere = normal"
   fi
-  [ -n "$warn" ] && [ $bad -eq 0 ] && verdict="$verdict (but:${warn#;})"
+  [ -n "$prebad" ] && [ $bad -eq 0 ] && [ -z "$hung" ] && warn="$warn; SMART bad sectors:$prebad"
+  [ -n "$warn" ] && [ $bad -eq 0 ] && [ -z "$hung" ] && verdict="$verdict (but:${warn#;})"
   printf '  Verdict      : \e[1m%s\e[0m\n' "$verdict"
   report_add "Disk check ($1) $dev $model: ${speed:-?} MB/s, fast=$good slow=$nslow bad=$bad, worst ${worst}ms - $verdict"
 }

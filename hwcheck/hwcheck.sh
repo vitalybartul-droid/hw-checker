@@ -604,6 +604,7 @@ summary() {
     esac
     case $vd in *"CRC errors grew"*)   warns+=("$dv: cable/adapter (CRC) errors during the scan") ;; esac
     case $vd in *"kernel disk errors"*) warns+=("$dv: resets/errors in the kernel log during the scan") ;; esac
+    case $vd in *"SMART bad sectors"*)  warns+=("$dv: SMART reports pending / uncorrectable sectors") ;; esac
   done < <(sed -n 's/^Disk check ([a-z]*) \(\/dev\/[^ ]*\) .*worst [0-9]*ms - \(.*\)$/\1 \2/p' "$f" | awk '{v[$1]=$0} END{for (d in v) print v[d]}')
   grep -qiE 'Self-test *:.*fail' "$f"                && issues+=("disk self-test failed")
   grep -q 'Boot RAM test : !!!' "$f"                 && issues+=("RAM errors at boot test")
