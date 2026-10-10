@@ -82,8 +82,10 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   and a "mount network share" option so files can go straight to the shop NAS (no network stack
   is started now; hardware is still detected without it).
 
-- **CPU stress test** — `stress-ng` for 5–10 min with live temperature and clock graph,
+- **CPU stress test** — `stress-ng` for 5–10 min with live CPU temperature and clock graph,
   to catch overheating and throttling (dirty cooler, dry thermal paste).
+  Also show the **CPU temperature in the status line of every long test** (RAM, disk scans), and
+  flag "CPU hot at idle" / "throttling under load" in the summary.
 - **Secure disk wipe before resale** — NVMe format / ATA Secure Erase / `nwipe` for HDD,
   with double confirmation.
 - **Save reports to the stick** — per-machine report file + one `intake.csv` table.
