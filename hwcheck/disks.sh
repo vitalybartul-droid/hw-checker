@@ -17,6 +17,22 @@ sz=$(blockdev --getsize64 "$dev" 2>/dev/null)
 [ -n "$sz" ] || { echo "  Cannot read the size of $dev"; pause; exit 1; }
 model=$(lsblk -dno MODEL "$dev" 2>/dev/null | xargs)
 ROT=$(cat "/sys/block/$(basename "$dev")/queue/rotational" 2>/dev/null)     # 1 = spinning HDD
+TRAN=$(lsblk -dno TRAN "$dev" 2>/dev/null | tr -d ' ')
+# USB link speed (480 = USB 2.0): walk up sysfs from the disk to the USB device
+USBSPEED=""
+if [ "$TRAN" = usb ]; then
+  d=$(readlink -f "/sys/block/$(basename "$dev")/device")
+  while [ -n "$d" ] && [ "$d" != / ]; do [ -r "$d/speed" ] && { USBSPEED=$(cat "$d/speed"); break; }; d=$(dirname "$d"); done
+fi
+# Colour thresholds depend on what the disk can do: MB/s for fast / ok / slow (below = very slow)
+if   [ "$TRAN" = usb ] && [ -n "$USBSPEED" ] && [ "${USBSPEED%%.*}" -le 480 ] 2>/dev/null; then CLASS="USB 2.0 disk"; TH="25 15 5"
+elif [ "$ROT" = 1 ];      then CLASS="HDD";      TH="80 40 10"
+elif [ "$TRAN" = nvme ];  then CLASS="NVMe SSD"; TH="500 150 30"
+elif [ "$TRAN" = usb ];   then CLASS="USB SSD";  TH="150 60 15"
+else                           CLASS="SATA SSD"; TH="250 100 25"; fi
+read -r MB1 MB2 MB3 <<< "$TH"
+# ms per 32 MiB block for each threshold (32 MiB = 33.55 MB)
+T1=$(( 33554 / MB1 )); T2=$(( 33554 / MB2 )); T3=$(( 33554 / MB3 ))
 
 # O_DIRECT bypasses the cache so we measure the disk, not RAM. Some NVMe/USB bridges
 # reject it: then fall back to normal reads instead of reporting every block as bad.
@@ -36,8 +52,8 @@ scan() {
   echo "  SMART before : $sm_before${t:+   temp ${t}C}"
   # Colour cells (background colour, no special glyphs: works with any console font)
   local C_FAST=$'\e[42m \e[0m' C_OK=$'\e[43m \e[0m' C_SLOW=$'\e[41m \e[0m' C_VSLOW=$'\e[41;1;37m!\e[0m' C_BAD=$'\e[47;1;31mX\e[0m'
-  printf '  Each cell = 32 MiB:  %s fast (>200 MB/s)   %s ok (65-200)   %s slow (20-65)   %s very slow (<20)   %s unreadable\n' \
-    "$C_FAST" "$C_OK" "$C_SLOW" "$C_VSLOW" "$C_BAD"
+  printf '  %s scale, each cell = 32 MiB:  %s fast (>%s MB/s)   %s ok (%s-%s)   %s slow (%s-%s)   %s very slow (<%s)   %s unreadable\n' \
+    "$CLASS" "$C_FAST" $MB1 "$C_OK" $MB2 $MB1 "$C_SLOW" $MB3 $MB2 "$C_VSLOW" $MB3 "$C_BAD"
   echo "  Ctrl+C = stop"
   echo
   START=$(date +%s)
@@ -48,9 +64,9 @@ scan() {
     if dd if="$dev" of=/dev/null bs=1M count=$CHUNK skip=$(( b*CHUNK )) $DIRECT status=none 2>/dev/null; then
       t1=$(date +%s%N); ms=$(( (t1-t0)/1000000 )); readms=$(( readms + ms ))
       [ $ms -gt $worst ] && worst=$ms
-      if   [ $ms -lt 150 ];  then c=$C_FAST; good=$((good+1))
-      elif [ $ms -lt 500 ];  then c=$C_OK; ok=$((ok+1))
-      elif [ $ms -lt 1500 ]; then c=$C_SLOW; slow=$((slow+1))
+      if   [ $ms -lt $T1 ]; then c=$C_FAST; good=$((good+1))
+      elif [ $ms -lt $T2 ]; then c=$C_OK; ok=$((ok+1))
+      elif [ $ms -lt $T3 ]; then c=$C_SLOW; slow=$((slow+1))
       else                        c=$C_VSLOW; vslow=$((vslow+1)); fi
     else
       [ $stop = 1 ] && break                  # read interrupted by Ctrl+C, not a disk error
@@ -122,7 +138,7 @@ selftest() {
 
 while true; do
   clear; title "DISK CHECK"
-  printf '  Disk   : \e[1m%s  %s\e[0m  (%s GB, %s)\n' "$dev" "$model" "$(( sz/1000000000 ))" "$([ "$ROT" = 1 ] && echo HDD || echo SSD)"
+  printf '  Disk   : \e[1m%s  %s\e[0m  (%s GB, %s)\n' "$dev" "$model" "$(( sz/1000000000 ))" "$CLASS${USBSPEED:+, USB link ${USBSPEED} Mb/s}"
   t=$(temp_now "$dev")
   echo "  SMART  : $(smart_line "$dev")${t:+   temp ${t}C}"
   echo "  Every check here is READ-ONLY. Nothing is written to the disk."
