@@ -70,10 +70,10 @@ scan() {
   local LN CL W MROWS K ncells used ST MAPTOP=8 cellmb cellsz
   LN=$(tput lines 2>/dev/null || echo 40); CL=$(tput cols 2>/dev/null || echo 120)
   W=$(( (CL - 10) / 2 )); [ $W -gt 100 ] && W=100; [ $W -lt 10 ] && W=10      # cells per row (cell + gap)
-  MROWS=$(( LN - MAPTOP - 13 )); [ $MROWS -lt 3 ] && MROWS=3                 # keep room for status + result
+  MROWS=$(( (LN - MAPTOP - 13) / 2 )); [ $MROWS -lt 3 ] && MROWS=3           # map rows are 2 lines apart; keep room for status + result
   K=$(( (niters + W*MROWS - 1) / (W*MROWS) ))                                 # blocks per cell
   ncells=$(( (niters + K - 1) / K )); used=$(( (ncells + W - 1) / W ))
-  ST=$(( MAPTOP + used + 1 ))
+  ST=$(( MAPTOP + used*2 ))
   cellmb=$(( K * step * CHUNK ))
   if [ $cellmb -ge 1024 ]; then cellsz="$(awk -v m=$cellmb 'BEGIN{printf "%.1f GiB", m/1024}')"; else cellsz="$cellmb MiB"; fi
 
@@ -96,7 +96,7 @@ scan() {
 
   local ci=0 cn=0 cw=0 r
   drawcell() {                                  # draw cell ci with level cw; row label at the start of each row
-    r=$(( MAPTOP + ci / W ))
+    r=$(( MAPTOP + (ci / W) * 2 ))             # empty line between map rows: cells never merge into columns
     [ $(( ci % W )) -eq 0 ] && printf '\e[%d;1H%6sG ' $r "$(( ci * cellmb / 1024 ))"
     printf '\e[%d;%dH%s' $r $(( 9 + (ci % W) * 2 )) "${CELL[$cw]}"
     ci=$(( ci + 1 )); cn=0; cw=0
@@ -156,7 +156,7 @@ scan() {
   [ $readms -gt 0 ] && speed=$(( nread*CHUNK*1049/readms ))
   sm_after=$(smart_line "$dev"); t=$(temp_now "$dev"); [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
   d=$(smart_deltas); local kl; kl=$(kern_lines); k=$(printf '%s' "$kl" | grep -c .)
-  chg=""; [ "$sm_after" != "$sm_before" ] && chg="   <- CHANGED during the scan"
+  chg=""; [ -n "$d" ] && chg="   <- error counters GREW during the scan: $d"
   [ $lost = 1 ] && { sm_after="not available (the disk is gone)"; chg=""; }
   echo "  SMART after  : $sm_after${t:+   temp ${t}C, max ${maxt}C}$chg"
   [ -n "$speed" ] && echo "  Read speed   : ${speed} MB/s average   (typical: HDD 60-160, SATA SSD 400-550, NVMe 1500+)"
