@@ -34,7 +34,11 @@ scan() {
   clear; title "SURFACE SCAN ($1) - $dev $model"
   sm_before=$(smart_line "$dev"); t=$(temp_now "$dev"); maxt=${t:-0}
   echo "  SMART before : $sm_before${t:+   temp ${t}C}"
-  echo "  Legend:  . fast    : ok    = slow    ! very slow    X read error        (Ctrl+C = stop)"
+  # Colour cells (background colour, no special glyphs: works with any console font)
+  local C_FAST=$'\e[42m \e[0m' C_OK=$'\e[43m \e[0m' C_SLOW=$'\e[41m \e[0m' C_VSLOW=$'\e[41;1;37m!\e[0m' C_BAD=$'\e[47;1;31mX\e[0m'
+  printf '  Each cell = 32 MiB:  %s fast (>200 MB/s)   %s ok (65-200)   %s slow (20-65)   %s very slow (<20)   %s unreadable\n' \
+    "$C_FAST" "$C_OK" "$C_SLOW" "$C_VSLOW" "$C_BAD"
+  echo "  Ctrl+C = stop"
   echo
   START=$(date +%s)
   local stop=0
@@ -44,13 +48,13 @@ scan() {
     if dd if="$dev" of=/dev/null bs=1M count=$CHUNK skip=$(( b*CHUNK )) $DIRECT status=none 2>/dev/null; then
       t1=$(date +%s%N); ms=$(( (t1-t0)/1000000 )); readms=$(( readms + ms ))
       [ $ms -gt $worst ] && worst=$ms
-      if   [ $ms -lt 150 ];  then c='.'; good=$((good+1))
-      elif [ $ms -lt 500 ];  then c=':'; ok=$((ok+1))
-      elif [ $ms -lt 1500 ]; then c='='; slow=$((slow+1))
-      else                        c='!'; vslow=$((vslow+1)); fi
+      if   [ $ms -lt 150 ];  then c=$C_FAST; good=$((good+1))
+      elif [ $ms -lt 500 ];  then c=$C_OK; ok=$((ok+1))
+      elif [ $ms -lt 1500 ]; then c=$C_SLOW; slow=$((slow+1))
+      else                        c=$C_VSLOW; vslow=$((vslow+1)); fi
     else
       [ $stop = 1 ] && break                  # read interrupted by Ctrl+C, not a disk error
-      c='X'; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
+      c=$C_BAD; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
     fi
     printf '%s' "$c"
     i=$((i+1)); col=$((col+1))
