@@ -51,6 +51,12 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   - **Windows password reset** — clears a LOCAL account password (chntpw); Microsoft accounts
     and BitLocker drives detected and refused.
 
+- **v1.3** — one consistent UI: shared `ui.sh` (key chips, `Q`/`Esc` = back everywhere, digits
+  to pick, no typing). Disk test and surface scan merged into `D` (quick check ~1 min / full scan /
+  SMART self-test), boot stick never offered. RAM test single-key. Repair menu: `F` files,
+  `P` password (pick account from a list), `X` shell (moved out of the main menu). File rescue
+  opens mc on the Windows partition and skips EFI/Recovery. Screen test: defects picked with digits.
+
 ## Priority 1
 
 - **Disk surface WRITE test** — optional destructive write/verify pass for disks that will be

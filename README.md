@@ -25,27 +25,32 @@ untouched) plus a set of Bash scripts that start automatically.
 
 | Key | Test |
 |-----|------|
-| `K` | Keyboard: on-screen layout lights up every key, incl. Fn/media keys |
+| `K` | Keyboard: on-screen layout lights up every key, incl. Fn/media keys (exit: `Esc` 3 times) |
 | `C` | Charger & battery live monitor: charge power, USB-C PD info, detects brief contact drops of a loose socket |
-| `V` | Screen: full-screen colours for dead/stuck pixels and backlight bleed |
-| `D` | Disks: read speed + SMART self-test (non-destructive) |
-| `M` | RAM: memtester (quick or full) |
+| `V` | Screen: full-screen colours for dead/stuck pixels and backlight bleed; defects picked with number keys |
+| `D` | Disks (read-only): `Enter` quick check (SMART + read speed + surface scan at ~300 points, ~1 min), `F` full Victoria-style surface scan with latency map, %, ETA and temperature, `T` SMART self-test |
+| `M` | RAM: memtester, `Enter` quick (1 GB) or `F` full |
 | `L` | Scroll the report · `+`/`-` text size (auto-scaled on HiDPI) · `Enter` twice power off |
+| `R` | Repair / rescue tools (below) |
 
-The plain-text report is kept in `/tmp/hwcheck.txt`.
+The plain-text report is kept in `/tmp/hwcheck.txt`; test results are added to it and to the summary.
+
+**Same rules on every screen:** single keys, no Enter to confirm a choice; `Q` or `Esc` = back;
+`Enter` = the default action; digits `1`-`9` = pick from a list; `Y` = confirm something risky.
+The boot stick itself is never offered as a disk.
 
 ## Repair / rescue tools (key `R`)
 
-For working on **customer** machines (not needed for used-PC intake):
+For working on **customer** machines:
 
 | Key | Tool |
 |-----|------|
-| `S` | Surface scan: read-only block-by-block read with a fast/slow/bad latency map + SMART counts |
-| `F` | File rescue: mounts internal disks **read-only**, USB drives read-write, opens Midnight Commander |
-| `W` | Windows password reset: clears a **local** account password (chntpw) |
+| `F` | File rescue: internal disks open **read-only** (service partitions skipped), USB drives and USB SSD/HDD enclosures open read-write, USB disks with Windows stay read-only; opens Midnight Commander on the Windows partition. `W` = make an internal disk writable for repair, `U` = rescan |
+| `P` | Windows password: pick a **local** account from the list, its password is cleared (chntpw) |
+| `X` | Linux shell (`exit` comes back) |
 
-BitLocker-encrypted drives are detected and skipped (they need the recovery key).
-Microsoft (online) accounts cannot be reset. Nothing is written during the surface scan.
+BitLocker-encrypted drives are detected and listed as locked (they need the recovery key).
+Microsoft (online) accounts cannot be reset.
 
 ## Quick start
 
@@ -68,7 +73,7 @@ Ventoy is not recommended: with Secure Boot on it needs its key enrolled on ever
 ## Repository layout
 
 ```
-hwcheck/                 report + tests (hwcheck.sh, kbdtest.sh, chargetest.sh, screentest.sh, disktest.sh, ramtest.sh)
+hwcheck/                 report + tests (hwcheck.sh, kbdtest.sh, chargetest.sh, screentest.sh, disks.sh, ramtest.sh, repair.sh, rescue.sh, pwreset.sh; ui.sh = shared menu helpers)
 hwcheck/debs/            optional .deb packages installed at boot (e.g. memtester)
 live/config-hooks/       live-config boot hook: installs the scripts and starts the report on tty1
 boot/grub/grub.cfg       example patched boot menu for Debian Live 13.7.0

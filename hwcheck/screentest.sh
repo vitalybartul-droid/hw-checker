@@ -6,6 +6,7 @@
 # uneven tint or stripes on grey.
 export LC_ALL=C
 [ "$(id -u)" = 0 ] || exec sudo bash "$0" "$@"
+. "$(dirname "$(readlink -f "$0")")/ui.sh"
 
 FB=/dev/fb0
 TMP=/tmp/screentest; mkdir -p "$TMP"
@@ -62,7 +63,7 @@ cat <<'EOF'
     RED / GREEN / BLUE -> dots of a different colour (stuck sub-pixels)
     GREY   -> uneven tint, stripes, pressure marks, yellow spots
 
-  Any key = next colour,  q = stop.     Press any key to start...
+  Any key = next colour,  Q / Esc = stop.     Press any key to start...
 EOF
 read -rsn1 _
 
@@ -71,13 +72,34 @@ for c in "${COLORS[@]}"; do
   IFS=: read -r name px idx rgb <<< "$c"
   if [ $use_fb = 1 ]; then fill_fb "$px"; else fill_console "$idx" "$rgb"; fi
   i=$((i+1))
-  read -rsn1 k
-  { [ "$k" = q ] || [ "$k" = Q ]; } && break
+  getkey
+  [ "$KEY" = q ] && break
 done
 
 printf '\e]R\e[0m'; clear
 echo
-echo "  Screen test finished. Colours shown: WHITE, BLACK, RED, GREEN, BLUE, GREY."
-read -r -p "  Problems seen? (Enter = none, or type a short note, e.g. '2 dead px top-left'): " note
+echo "  Screen test finished. What did you see? Press every number that applies, then Enter."
+echo
+D=( "" "dead pixels (dark dots on white)" "stuck pixels (bright dots on black)" "backlight bleed (light patches on black)" \
+    "lines or stripes" "uneven tint / spots / pressure marks" "other - type a note" )
+for n in 1 2 3 4 5 6; do printf '    %s %d %s  %s\n' "$KEYC" $n "$KEYN" "${D[$n]}"; done
+keybar 1-6 "Toggle a defect" Enter "Done (nothing pressed = no defects)"
+sel=""
+while :; do
+  getkey
+  case $KEY in
+    [1-6]) case " $sel " in *" $KEY "*) sel=$(echo " $sel " | sed "s/ $KEY / /; s/^ *//; s/ *$//") ;; *) sel="$sel $KEY" ;; esac
+           printf '\r  Selected: %s\e[K' "$(for n in $sel; do printf '%s; ' "${D[$n]%% (*}"; done)" ;;
+    "") break ;;
+  esac
+done
+echo
+note=""
+for n in $sel; do
+  if [ "$n" = 6 ]; then stty echo 2>/dev/null; read -r -p "  Note: " o; [ -n "$o" ] && note="$note${note:+, }$o"
+  else note="$note${note:+, }${D[$n]%% (*}"; fi
+done
 res="Screen test: ${note:-no defects noted}"
+echo "  $res"
 echo "$res" >> /tmp/hwcheck.txt
+sleep 1

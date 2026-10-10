@@ -1,25 +1,22 @@
 #!/bin/bash
-# repair.sh — repair/rescue tools for working on CUSTOMER machines.
-# Not needed for used-PC intake; grouped here to keep the main report clean.
+# repair.sh — tools for CUSTOMER machines (key R): file rescue, password reset, shell.
+# The disk check (surface scan) is under D in the main menu: it is used for intake too.
 export LC_ALL=C
 T=$(dirname "$(readlink -f "$0")")
+. "$T/ui.sh"
 while true; do
-  clear; echo
-  echo "  =============== REPAIR / RESCUE TOOLS ==============="
-  echo "  For customer machines. Not needed for used-PC intake."
+  clear; title "REPAIR / RESCUE"
+  echo "    F  File rescue        copy files off a machine that does not boot (Midnight Commander)"
+  echo "    P  Windows password   clear the password of a LOCAL Windows account"
+  echo "    X  Shell              Linux command line, type 'exit' to come back here"
   echo
-  echo "    S   Surface scan        is the disk healthy? (read-only)"
-  echo "    F   File rescue (mc)     copy files off a dead Windows"
-  echo "    W   Windows password     clear a LOCAL account password"
-  echo
-  echo "    Q   Back to the report"
-  echo
-  printf "  Choose a key: "
-  IFS= read -rsn1 k; echo
-  case $k in
-    s|S) bash "$T/surftest.sh" ;;
-    f|F) bash "$T/rescue.sh" ;;
-    w|W) bash "$T/pwreset.sh" ;;
-    q|Q|"") break ;;
+  echo "  Disk check / surface scan: D in the main menu."
+  keybar F "File rescue" P "Password" X "Shell" Q Back
+  getkey
+  case $KEY in
+    f) bash "$T/rescue.sh" ;;
+    p) bash "$T/pwreset.sh" ;;
+    x) clear; echo "  Shell (root). Type 'exit' to come back to the menu."; echo; bash -l 2>/dev/null || bash ;;
+    q) break ;;
   esac
 done

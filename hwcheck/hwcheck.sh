@@ -618,11 +618,11 @@ summary() {
 }
 
 show() { clear; colorize "$OUT"; summary; }
+. "$(dirname "$(readlink -f "$0")")/ui.sh"
 menu() {
-  local k=$'\e[0;30;43m' n=$'\e[0m'        # not bold: on the Linux console bold black is grey
-  printf '\n %s Enter x2 %s Power off  %s K %s Keyboard  %s C %s Charger  %s V %s Screen  %s D %s Disks  %s R %s Repair  %s M %s RAM  %s L %s Scroll  %s S %s Shell ' \
-    "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n" "$k" "$n"
-  [ ${#FONTS[@]} -gt 0 ] && printf ' %s +/- %s Text size ' "$k" "$n"
+  local a=("Enter x2" "Power off" K Keyboard C Charger V Screen D Disks M RAM L Scroll R Repair)
+  [ ${#FONTS[@]} -gt 0 ] && a+=("+/-" "Text size")
+  keybar "${a[@]}"
 }
 
 if [ ! -t 0 ]; then cat "$OUT"; exit 0; fi
@@ -649,8 +649,7 @@ while true; do
           show ;;
     c|C)  bash "$T/chargetest.sh"; show ;;
     v|V)  bash "$T/screentest.sh"; show ;;
-    d|D)  bash "$T/disktest.sh" | tee -a "$OUT"         # stdout = results for the report, stderr = progress (screen only)
-          read -rsn1 -p "  Press any key..." _; show ;;
+    d|D)  bash "$T/disks.sh"; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
     l|L)  colorize "$OUT" | less -R -P'  Up/Down PgUp/PgDn = scroll     q = back to the report '; show ;;
     +|=)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -lt $(( ${#FONTS[@]} - 1 )) ]; then
@@ -660,7 +659,6 @@ while true; do
             FIDX=$((FIDX-1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the smallest size
     r|R)  bash "$T/repair.sh"; show ;;
-    s|S)  printf '\n  Shell. Type "sudo hwcheck" to come back, "sudo poweroff" to turn off.\n'; exit 0 ;;
     *)    redraw=0 ;;                          # ignore other keys, keep the screen as is
   esac
 done
