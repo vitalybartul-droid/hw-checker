@@ -80,7 +80,7 @@ scan() {
   echo "  Ctrl+C = stop"
   echo
   START=$(date +%s)
-  local stop=0
+  local stop=0 lost=0
   trap 'stop=1' INT                           # Ctrl+C ends the scan but still prints the result
   while [ $b -lt $total ] && [ $stop = 0 ]; do
     t0=$(date +%s%N)
@@ -93,6 +93,10 @@ scan() {
       else                       c=$C_VSLOW; vslow=$((vslow+1)); fi
     else
       [ $stop = 1 ] && break                  # read interrupted by Ctrl+C, not a disk error
+      # Did the disk drop off the bus (USB power / adapter reset)? Then stop instead of drawing X forever.
+      if [ ! -b "$dev" ] || [ -z "$(blockdev --getsize64 "$dev" 2>/dev/null)" ] || kern_lines | grep -qiE 'disconnect|offline device'; then
+        lost=1; break
+      fi
       c=$C_BAD; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
     fi
     printf '%s ' "$c"                         # cell + dark gap: every block stays visible
@@ -132,8 +136,16 @@ scan() {
     warn="$warn; kernel disk errors $k"
   fi
 
+  if [ $lost = 1 ]; then
+    printf '\n  \e[1;37;41m DISK DISCONNECTED during the scan at %s GB \e[0m\n' "$(( b*CHUNK/1024 ))"
+    echo "  The disk vanished from the system (often with a click). Usually: not enough power on the USB port,"
+    echo "  a bad USB adapter or cable - not necessarily bad sectors. Try another port, a Y-cable / powered adapter,"
+    echo "  or connect the disk directly by SATA, then scan again."
+  fi
   local nslow=$(( slow + vslow )) verdict
-  if [ $bad -gt 0 ]; then
+  if [ $lost = 1 ]; then
+    verdict="DISK DISCONNECTED during the scan - check power / USB adapter / cable before judging the disk"
+  elif [ $bad -gt 0 ]; then
     verdict="READ ERRORS - disk is failing, copy the data off first"
   elif case "$warn" in *"bad sectors grew"*) true ;; *) false ;; esac; then
     verdict="bad sectors appearing right now - disk is failing, copy the data off first"

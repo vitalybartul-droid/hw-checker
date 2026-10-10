@@ -599,6 +599,7 @@ summary() {
   grep -q 'Disk check.*CRC errors grew' "$f"         && warns+=("disk cable/adapter errors (CRC) during the scan")
   grep -q 'Disk check.*kernel disk errors' "$f"      && warns+=("disk resets/errors in the kernel log during the scan")
   grep -q 'Disk check.*slow sectors' "$f"            && warns+=("HDD has slow sectors")
+  grep -q 'Disk check.*DISK DISCONNECTED' "$f"       && warns+=("disk disconnected during the scan - check power / USB adapter")
   grep -qiE 'Self-test *:.*fail' "$f"                && issues+=("disk self-test failed")
   grep -q 'Boot RAM test : !!!' "$f"                 && issues+=("RAM errors at boot test")
   grep -q 'RAM test.*FAILED' "$f"                    && issues+=("RAM test FAILED")
