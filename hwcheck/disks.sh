@@ -57,64 +57,97 @@ kern_lines() {                                  # new kernel messages about disk
 }
 
 # ---------- surface scan: $1 = quick | full ----------
+# Full-screen layout that never scrolls: header (title, SMART, legend) / map of the WHOLE disk /
+# status lines. If there are more blocks than cells, one cell covers several blocks and takes
+# the colour of the WORST of them, so no slow or bad spot is hidden.
 scan() {
-  local CHUNK=32 total step niters START i=0 b=0 col=0 c ms t t0 t1 el pct eta W cols
-  local good=0 ok=0 slow=0 vslow=0 bad=0 worst=0 readms=0 rowms=0 rown=0 badlist="" maxt sm_before sm_after chg d k alerts
+  local CHUNK=32 total step niters START i=0 b=0 ms t t0 t1 el pct eta d k alerts lv
+  local good=0 ok=0 slow=0 vslow=0 bad=0 worst=0 readms=0 badlist="" maxt sm_before sm_after chg
   total=$(( sz / (CHUNK*1024*1024) )); [ $total -lt 1 ] && total=1
   step=1; [ "$1" = quick ] && { step=$(( total/300 )); [ $step -lt 1 ] && step=1; }
   niters=$(( (total + step - 1) / step ))
-  cols=$(tput cols 2>/dev/null || echo 120)
-  W=$(( (cols - 50) / 2 )); [ $W -gt 64 ] && W=64; [ $W -lt 16 ] && W=16      # cells per row (cell + gap = 2 columns)
 
-  clear; title "SURFACE SCAN ($1) - $dev $model${RPM:+, $RPM}"
+  local LN CL W MROWS K ncells used ST MAPTOP=8 cellmb cellsz
+  LN=$(tput lines 2>/dev/null || echo 40); CL=$(tput cols 2>/dev/null || echo 120)
+  W=$(( (CL - 10) / 2 )); [ $W -gt 100 ] && W=100; [ $W -lt 10 ] && W=10      # cells per row (cell + gap)
+  MROWS=$(( LN - MAPTOP - 13 )); [ $MROWS -lt 3 ] && MROWS=3                 # keep room for status + result
+  K=$(( (niters + W*MROWS - 1) / (W*MROWS) ))                                 # blocks per cell
+  ncells=$(( (niters + K - 1) / K )); used=$(( (ncells + W - 1) / W ))
+  ST=$(( MAPTOP + used + 1 ))
+  cellmb=$(( K * step * CHUNK ))
+  if [ $cellmb -ge 1024 ]; then cellsz="$(awk -v m=$cellmb 'BEGIN{printf "%.1f GiB", m/1024}')"; else cellsz="$cellmb MiB"; fi
+
+  local C_FAST=$'\e[42m \e[0m' C_OK=$'\e[1;7;33m \e[0m' C_SLOW=$'\e[41m \e[0m' C_VSLOW=$'\e[41;1;37m!\e[0m' C_BAD=$'\e[47;1;31mX\e[0m'
+  local CELL=("$C_FAST" "$C_OK" "$C_SLOW" "$C_VSLOW" "$C_BAD")
+
   SB=(); while IFS='=' read -r k d; do SB[$k]=$d; done < <(smart_vals "$dev")
   KBASE=$(dmesg 2>/dev/null | wc -l); DN=$(basename "$dev")
   sm_before=$(smart_line "$dev"); t=$(temp_now "$dev"); maxt=${t:-0}
+
+  clear; printf '\e[?25l'                       # hide the cursor while drawing
+  title "SURFACE SCAN ($1) - $dev $model${RPM:+, $RPM}"
   echo "  SMART before : $sm_before${t:+   temp ${t}C}"
-  # Colour cells (background colour, no special glyphs: works with any console font).
-  # The console has only dim backgrounds (yellow looks orange); bold+reverse gives a bright yellow cell.
-  local C_FAST=$'\e[42m \e[0m' C_OK=$'\e[1;7;33m \e[0m' C_SLOW=$'\e[41m \e[0m' C_VSLOW=$'\e[41;1;37m!\e[0m' C_BAD=$'\e[47;1;31mX\e[0m'
-  printf '  %s scale, each cell = 32 MiB:  %s fast (>%s MB/s)  %s ok (%s-%s)  %s slow (%s-%s)  %s very slow (<%s)  %s unreadable\n' \
+  printf '  %s scale:  %s fast (>%s MB/s)  %s ok (%s-%s)  %s slow (%s-%s)  %s very slow (<%s)  %s unreadable\n' \
     "$CLASS" "$C_FAST" $MB1 "$C_OK" $MB2 $MB1 "$C_SLOW" $MB3 $MB2 "$C_VSLOW" $MB3 "$C_BAD"
-  echo "  Right column: done %, elapsed<left, speed of that row, disk temperature, red = error counters that GREW."
-  echo "  Ctrl+C = stop"
-  echo
-  START=$(date +%s)
+  printf '  Whole disk on one screen: each cell = %s, coloured by its worst block.   \e[1mCtrl+C = stop\e[0m\n' "$cellsz"
+
+  local ci=0 cn=0 cw=0 r
+  drawcell() {                                  # draw cell ci with level cw; row label at the start of each row
+    r=$(( MAPTOP + ci / W ))
+    [ $(( ci % W )) -eq 0 ] && printf '\e[%d;1H%6sG ' $r "$(( ci * cellmb / 1024 ))"
+    printf '\e[%d;%dH%s' $r $(( 9 + (ci % W) * 2 )) "${CELL[$cw]}"
+    ci=$(( ci + 1 )); cn=0; cw=0
+  }
+  local lastsec=0 lastchk=0 winms=0 winn=0 now nowsp avg
+  status() {
+    el=$(( $(date +%s) - START )); pct=$(( i*100/niters )); eta=0; [ $i -gt 0 ] && eta=$(( el*(niters-i)/i ))
+    nowsp="-"; [ $winms -gt 0 ] && nowsp=$(( winn*CHUNK*1049/winms ))
+    avg="-";   [ $readms -gt 0 ] && avg=$(( (good+ok+slow+vslow)*CHUNK*1049/readms ))
+    printf '\e[%d;1H\e[K  \e[1m%3d%%\e[0m   %02d:%02d elapsed   ~%02d:%02d left   now %s MB/s   average %s MB/s   blocks: %d ok, %d slow, %d bad' \
+      $ST "$pct" $((el/60)) $((el%60)) $((eta/60)) $((eta%60)) "$nowsp" "$avg" $((good+ok)) $((slow+vslow)) $bad
+    printf '\e[%d;1H\e[K  temp %s (max %sC)   \e[1;31m%s\e[0m' $(( ST+1 )) "${t:+${t}C}" "$maxt" "$alerts"
+    winms=0; winn=0
+  }
+
+  START=$(date +%s); alerts=""
   local stop=0 lost=0
-  trap 'stop=1' INT                           # Ctrl+C ends the scan but still prints the result
+  trap 'stop=1' INT                             # Ctrl+C ends the scan but still prints the result
   while [ $b -lt $total ] && [ $stop = 0 ]; do
     t0=$(date +%s%N)
     if dd if="$dev" of=/dev/null bs=1M count=$CHUNK skip=$(( b*CHUNK )) $DIRECT status=none 2>/dev/null; then
-      t1=$(date +%s%N); ms=$(( (t1-t0)/1000000 )); readms=$(( readms + ms )); rowms=$(( rowms + ms )); rown=$(( rown + 1 ))
+      t1=$(date +%s%N); ms=$(( (t1-t0)/1000000 )); readms=$(( readms + ms )); winms=$(( winms + ms )); winn=$(( winn + 1 ))
       [ $ms -gt $worst ] && worst=$ms
-      if   [ $ms -lt $T1 ]; then c=$C_FAST; good=$((good+1))
-      elif [ $ms -lt $T2 ]; then c=$C_OK; ok=$((ok+1))
-      elif [ $ms -lt $T3 ]; then c=$C_SLOW; slow=$((slow+1))
-      else                       c=$C_VSLOW; vslow=$((vslow+1)); fi
+      if   [ $ms -lt $T1 ]; then lv=0; good=$((good+1))
+      elif [ $ms -lt $T2 ]; then lv=1; ok=$((ok+1))
+      elif [ $ms -lt $T3 ]; then lv=2; slow=$((slow+1))
+      else                       lv=3; vslow=$((vslow+1)); fi
     else
-      [ $stop = 1 ] && break                  # read interrupted by Ctrl+C, not a disk error
+      [ $stop = 1 ] && break                    # read interrupted by Ctrl+C, not a disk error
       # Did the disk drop off the bus (USB power / adapter reset)? Then stop instead of drawing X forever.
       if [ ! -b "$dev" ] || [ -z "$(blockdev --getsize64 "$dev" 2>/dev/null)" ] || kern_lines | grep -qiE 'disconnect|offline device'; then
         lost=1; break
       fi
-      c=$C_BAD; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
+      lv=4; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
     fi
-    printf '%s ' "$c"                         # cell + dark gap: every block stays visible
-    i=$((i+1)); col=$((col+1))
-    if [ $col -ge $W ] || [ $(( b + step )) -ge $total ]; then
-      el=$(( $(date +%s) - START )); pct=$(( i*100/niters )); eta=$(( el*(niters-i)/i ))
-      t=$(temp_now "$dev"); [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
-      d=$(smart_deltas); k=$(kern_lines | wc -l)
-      alerts="$d"; [ "$k" -gt 0 ] && alerts="$alerts${alerts:+ }kernel:$k"
-      printf '%*s %3d%%  %02d:%02d<%02d:%02d  %4s MB/s  %s\e[1;31m%s\e[0m\n' $(( (W-col)*2 )) "" "$pct" $((el/60)) $((el%60)) $((eta/60)) $((eta%60)) \
-        "$([ $rowms -gt 0 ] && echo $(( rown*CHUNK*1049/rowms )) || echo -)" "${t:+${t}C  }" "$alerts"
-      col=0; rowms=0; rown=0
+    i=$((i+1)); cn=$((cn+1)); [ $lv -gt $cw ] && cw=$lv
+    [ $cn -ge $K ] && drawcell
+    now=$(date +%s)
+    if [ $now -ne $lastsec ]; then
+      lastsec=$now
+      if [ $(( now - lastchk )) -ge 10 ]; then   # SMART and kernel log every 10 s (smartctl is slow-ish)
+        lastchk=$now
+        t=$(temp_now "$dev"); [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
+        d=$(smart_deltas); k=$(kern_lines | wc -l)
+        alerts="$d"; [ "$k" -gt 0 ] && alerts="$alerts${alerts:+ }kernel-errors:$k"
+      fi
+      status
     fi
     b=$(( b+step ))
   done
   trap - INT
-  [ $col -gt 0 ] && printf '\n'
-  echo
+  [ $cn -gt 0 ] && drawcell
+  status
+  printf '\e[?25h\e[%d;1H\n' $(( ST+2 ))      # cursor back, results go below the status lines
 
   local nread=$(( good+ok+slow+vslow )) speed=""
   [ $readms -gt 0 ] && speed=$(( nread*CHUNK*1049/readms ))
