@@ -28,7 +28,7 @@ untouched) plus a set of Bash scripts that start automatically.
 | `K` | Keyboard: on-screen layout lights up every key, incl. Fn/media keys (exit: `Esc` 3 times) |
 | `C` | Charger & battery live monitor: charge power, USB-C PD info, detects brief contact drops of a loose socket |
 | `V` | Screen: full-screen colours for dead/stuck pixels and backlight bleed; defects picked with number keys |
-| `D` | Disks (read-only): `Enter` quick check (SMART + read speed + surface scan at ~300 points, ~1 min), `F` full Victoria-style surface scan with latency map, %, ETA and temperature, `T` SMART self-test |
+| `D` | Disks (read-only): `Enter` quick check (SMART + read speed + surface scan at ~300 points, ~1 min), `F` full Victoria-style surface scan: colour map with thresholds per disk type (NVMe / SATA SSD / HDD / USB), speed per row, temperature, live SMART and cable (CRC) error counters and kernel disk resets; SMART also through USB adapters (`-d sat`). `T` SMART self-test |
 | `M` | RAM: memtester, `Enter` quick (1 GB) or `F` full |
 | `L` | Scroll the report · `+`/`-` text size (auto-scaled on HiDPI) · `Enter` twice power off |
 | `R` | Repair / rescue tools (below) |

@@ -60,27 +60,48 @@ pick_disk() {
   done
 }
 
+# Many USB-SATA adapters answer SMART only with "-d sat": find what works for this disk.
+SMARTD=""
+smart_detect() {
+  local o
+  for o in "" "-d sat" "-d sat,12" "-d usbjmicron" "-d usbcypress" "-d usbsunplus"; do
+    smartctl $o -A "$1" 2>/dev/null | grep -qE 'ID#|Percentage Used' && { SMARTD=$o; return 0; }
+  done
+  SMARTD=""; return 1
+}
+
 # SMART health in one line — NVMe and SATA report it with different fields.
 smart_line() {
-  local a; a=$(smartctl -A "$1" 2>/dev/null)
+  local a; a=$(smartctl $SMARTD -A "$1" 2>/dev/null)
   if echo "$a" | grep -q 'Percentage Used'; then
     echo "$a" | awk -F: '
       /Percentage Used/{gsub(/[ %]/,"",$2); u=$2}
       /Available Spare:/{gsub(/[ %]/,"",$2); s=$2}
       /Media and Data Integrity Errors/{gsub(/ /,"",$2); m=$2}
       /Critical Warning/{gsub(/ /,"",$2); w=$2}
-      END{printf "wear=%s%% spare=%s%% media_errors=%s warning=%s", u!=""?u:"?", s!=""?s:"?", m!=""?m:"?", w!=""?w:"?"}'
+      /Error Information Log Entries/{gsub(/[ ,]/,"",$2); e=$2}
+      END{printf "wear=%s%% spare=%s%% media_errors=%s err_log=%s warning=%s", u!=""?u:"?", s!=""?s:"?", m!=""?m:"?", e!=""?e:"?", w!=""?w:"?"}'
   elif [ -n "$a" ]; then
     echo "$a" | awk '
-      /Reallocated_Sector_Ct/{r=$10} /Current_Pending_Sector/{p=$10} /Offline_Uncorrectable/{u=$10}
-      END{printf "realloc=%s pending=%s uncorr=%s", r!=""?r:"n/a", p!=""?p:"n/a", u!=""?u:"n/a"}'
+      $2=="Reallocated_Sector_Ct"{r=$10} $2=="Current_Pending_Sector"{p=$10} $2=="Offline_Uncorrectable"{u=$10}
+      $2=="UDMA_CRC_Error_Count"{c=$10} $2=="Power_On_Hours"{h=$10}
+      END{printf "realloc=%s pending=%s uncorr=%s cable_crc=%s%s", r!=""?r:"n/a", p!=""?p:"n/a", u!=""?u:"n/a", c!=""?c:"n/a", h!=""?"  hours="h:""}'
   else
     echo "not available (USB bridge without SMART?)"
   fi
 }
 
 temp_now() {
-  smartctl -A "$1" 2>/dev/null | awk '
+  smartctl $SMARTD -A "$1" 2>/dev/null | awk '
     /^Temperature:/{print $2; exit}
     /Temperature_Celsius|Airflow_Temperature_Cel/{print $10; exit}' | grep -oE '^[0-9]+' | head -1
+}
+
+# Error counters as name=value lines (for "did it grow during the test?")
+smart_vals() {
+  local a; a=$(smartctl $SMARTD -A "$1" 2>/dev/null)
+  echo "$a" | awk -F: '/Media and Data Integrity Errors/{gsub(/[ ,]/,"",$2); print "media_errors="$2}
+                       /Error Information Log Entries/{gsub(/[ ,]/,"",$2); print "err_log="$2}'
+  echo "$a" | awk '$2=="Reallocated_Sector_Ct"{print "realloc="$10} $2=="Current_Pending_Sector"{print "pending="$10}
+                   $2=="Offline_Uncorrectable"{print "uncorr="$10} $2=="UDMA_CRC_Error_Count"{print "cable_crc="$10}'
 }
