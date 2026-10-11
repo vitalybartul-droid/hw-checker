@@ -60,6 +60,10 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   temperature / SMART / cable CRC / kernel resets, SMART through USB adapters, disk drop-out detection
   (hung on a bad sector vs power problem). Test results in their own report section; no beeping.
 
+- **v1.4** — surface scan: SMART / kernel-log polling runs in the background, so a slow `smartctl`
+  never pauses the scan; NVMe "timeout, completion polled" (lost interrupt, Linux power-saving quirk,
+  disk answered) shown in yellow as harmless and kept out of the error count.
+
 ## Priority 1
 
 - **Disk WRITE test (destructive, for disks being wiped)** — in `D`, double confirmation + typed word:
@@ -77,6 +81,9 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   (list, delete, create, GPT/MBR conversion) behind a simple menu.
 
 ## Priority 2
+
+- **NVMe power-saving boot option** — extra GRUB entry with `nvme_core.default_ps_max_latency_us=0`
+  for laptops where NVMe interrupts get lost (many "completion polled" lines).
 
 - **BitLocker unlock with the recovery key** in file rescue (`dislocker`) — ~10% of customer disks.
 - **F2 user menu in mc** with ready actions: copy the whole Users folder, collect all documents, collect all photos.

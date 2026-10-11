@@ -53,7 +53,12 @@ smart_deltas() {                                # -> "cable_crc+3 realloc+1" (on
 }
 kern_lines() {                                  # new kernel messages about disk errors / resets
   dmesg 2>/dev/null | tail -n +$(( KBASE + 1 )) | grep -iE "$DN|ata[0-9]|usb [0-9]|nvme" \
-    | grep -iE 'error|reset|timeout|offline|disconnect|fail|abort'
+    | grep -iE 'error|reset|timeout|offline|disconnect|fail|abort' | grep -viE 'completion polled'
+}
+# "nvme: I/O tag N QID x timeout, completion polled" = the command DID complete, only its
+# interrupt was lost (NVMe power saving / firmware quirk under Linux). Not a disk fault: counted apart.
+kern_polled() {
+  dmesg 2>/dev/null | tail -n +$(( KBASE + 1 )) | grep -ciE 'nvme.*completion polled'
 }
 
 # ---------- surface scan: $1 = quick | full ----------
@@ -61,7 +66,7 @@ kern_lines() {                                  # new kernel messages about disk
 # status lines. If there are more blocks than cells, one cell covers several blocks and takes
 # the colour of the WORST of them, so no slow or bad spot is hidden.
 scan() {
-  local CHUNK=32 total step niters START i=0 b=0 ms t t0 t1 el pct eta d k alerts lv
+  local CHUNK=32 total step niters START i=0 b=0 ms t t0 t1 el pct eta d k alerts lv kp=0 tt qalerts="" bgpid="" BGF=/tmp/.scanbg.$$
   local good=0 ok=0 slow=0 vslow=0 bad=0 worst=0 readms=0 badlist="" maxt sm_before sm_after chg
   total=$(( sz / (CHUNK*1024*1024) )); [ $total -lt 1 ] && total=1
   step=1; [ "$1" = quick ] && { step=$(( total/300 )); [ $step -lt 1 ] && step=1; }
@@ -108,7 +113,7 @@ scan() {
     avg="-";   [ $readms -gt 0 ] && avg=$(( (good+ok+slow+vslow)*CHUNK*1049/readms ))
     printf '\e[%d;1H\e[K  \e[1m%3d%%\e[0m   %02d:%02d elapsed   ~%02d:%02d left   now %s MB/s   average %s MB/s   blocks: %d ok, %d slow, %d bad' \
       $ST "$pct" $((el/60)) $((el%60)) $((eta/60)) $((eta%60)) "$nowsp" "$avg" $((good+ok)) $((slow+vslow)) $bad
-    printf '\e[%d;1H\e[K  temp %s (max %sC)   \e[1;31m%s\e[0m' $(( ST+1 )) "${t:+${t}C}" "$maxt" "$alerts"
+    printf '\e[%d;1H\e[K  temp %s (max %sC)   \e[1;31m%s\e[0m  \e[1;33m%s\e[0m' $(( ST+1 )) "${t:+${t}C}" "$maxt" "$alerts" "$qalerts"
     winms=0; winn=0
   }
 
@@ -137,17 +142,26 @@ scan() {
     now=$(date +%s)
     if [ $now -ne $lastsec ]; then
       lastsec=$now
-      if [ $(( now - lastchk )) -ge 10 ]; then   # SMART and kernel log every 10 s (smartctl is slow-ish)
+      # SMART and kernel log every 10 s, IN THE BACKGROUND: a slow or stuck smartctl
+      # (e.g. NVMe lost interrupt = up to 60 s) must never pause the scan itself.
+      if [ $(( now - lastchk )) -ge 10 ] && ! { [ -n "$bgpid" ] && kill -0 "$bgpid" 2>/dev/null; }; then
         lastchk=$now
-        t=$(temp_now "$dev"); [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
-        d=$(smart_deltas); k=$(kern_lines | wc -l)
-        alerts="$d"; [ "$k" -gt 0 ] && alerts="$alerts${alerts:+ }kernel-errors:$k"
+        ( x1=$(temp_now "$dev"); x2=$(smart_deltas); x3=$(kern_lines | wc -l); x4=$(kern_polled)
+          printf '%s|%s|%s|%s\n' "$x1" "$x2" "$x3" "$x4" > "$BGF.tmp" && mv -f "$BGF.tmp" "$BGF" ) </dev/null >/dev/null 2>&1 &
+        bgpid=$!
+      fi
+      if [ -s "$BGF" ]; then
+        IFS='|' read -r tt d k kp < "$BGF"; rm -f "$BGF"
+        [ -n "$tt" ] && t=$tt; [ -n "$t" ] && [ "$t" -gt "$maxt" ] && maxt=$t
+        alerts="$d"; [ "${k:-0}" -gt 0 ] && alerts="$alerts${alerts:+ }kernel-errors:$k"
+        qalerts=""; [ "${kp:-0}" -gt 0 ] && qalerts="nvme-irq-quirk:$kp (harmless)"
       fi
       status
     fi
     b=$(( b+step ))
   done
   trap - INT
+  [ -n "$bgpid" ] && kill "$bgpid" 2>/dev/null; rm -f "$BGF" "$BGF.tmp"
   [ $cn -gt 0 ] && drawcell
   status
   printf '\e[?25h\e[%d;1H\n' $(( ST+2 ))      # cursor back, results go below the status lines
@@ -171,6 +185,11 @@ scan() {
     printf '  \e[1;31mKernel log   : %s disk error / reset message(s) during the scan - cable, power, adapter or controller\e[0m\n' "$k"
     printf '%s\n' "$kl" | tail -3 | sed 's/^/      /'
     warn="$warn; kernel disk errors $k"
+  fi
+  kp=$(kern_polled)
+  if [ "$kp" -gt 0 ]; then
+    printf '  \e[1;33mNVMe note    : %s command(s) "timeout, completion polled" - the disk answered, Linux missed the\e[0m\n' "$kp"
+    printf '  \e[1;33m               interrupt (NVMe power-saving quirk). Not a disk fault; Windows is not affected.\e[0m\n'
   fi
 
   local hung=""
@@ -214,6 +233,7 @@ scan() {
   fi
   [ -n "$prebad" ] && [ $bad -eq 0 ] && [ -z "$hung" ] && warn="$warn; SMART bad sectors:$prebad"
   [ -n "$warn" ] && [ $bad -eq 0 ] && [ -z "$hung" ] && verdict="$verdict (but:${warn#;})"
+  [ "$kp" -gt 0 ] && verdict="$verdict [NVMe lost interrupts: $kp, harmless]"
   printf '  Verdict      : \e[1m%s\e[0m\n' "$verdict"
   report_add "Disk check ($1) $dev $model: ${speed:-?} MB/s, fast=$good slow=$nslow bad=$bad, worst ${worst}ms - $verdict"
 }
