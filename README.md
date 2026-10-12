@@ -32,7 +32,7 @@ untouched) plus a set of Bash scripts that start automatically.
 | `M` | RAM: memtester, `Enter` quick (1 GB) or `F` full |
 | `L` | Scroll the report · `+`/`-` text size (auto-scaled on HiDPI) · `Enter` twice power off |
 | `R` | Repair / rescue tools (below) |
-| `B` | Key colours: cycle white-on-orange / black-on-yellow / white-on-blue / black-on-white / black-on-orange, if the chips are hard to read on a screen |
+| `B` | Key colours: white on blue (default) / white on orange / black on white, if the chips are hard to read on a screen |
 
 The plain-text report is kept in `/tmp/hwcheck.txt`; test results are added to it and to the summary.
 

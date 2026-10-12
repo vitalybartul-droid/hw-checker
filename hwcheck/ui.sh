@@ -7,9 +7,9 @@
 # Key chip colours. Some screens show black-on-orange badly, so B (main menu) cycles the schemes;
 # the choice is kept in /tmp for the session and every screen sources this file.
 # Linux console: bold = bright foreground; "1;7;33" (bold + reverse) = BRIGHT yellow background.
-KEYSCHEMES=($'\e[0;1;37;43m' $'\e[0;1;7;33m' $'\e[0;1;37;44m' $'\e[0;1;7;37m' $'\e[0;30;43m')
-KEYNAMES=("white on orange" "black on yellow" "white on blue" "black on white" "black on orange")
-KEYIDX=$(cat /tmp/.hwcheck-keys 2>/dev/null); [[ $KEYIDX =~ ^[0-4]$ ]] || KEYIDX=0
+KEYSCHEMES=($'\e[0;1;37;44m' $'\e[0;1;37;43m' $'\e[0;1;7;37m')
+KEYNAMES=("white on blue" "white on orange" "black on white")
+KEYIDX=$(cat /tmp/.hwcheck-keys 2>/dev/null); [[ $KEYIDX =~ ^[0-2]$ ]] || KEYIDX=0
 KEYC=${KEYSCHEMES[$KEYIDX]}; KEYN=$'\e[0m'
 next_keys() {                                   # cycle to the next scheme and remember it
   KEYIDX=$(( (KEYIDX + 1) % ${#KEYSCHEMES[@]} )); echo "$KEYIDX" > /tmp/.hwcheck-keys 2>/dev/null
