@@ -67,6 +67,8 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   **Disk erase** (`D` → `E`): quick (wipefs + TRIM), secure (NVMe format with crypto/user-data
   erase, ATA Secure Erase with automatic unfreeze by sleep), overwrite with zeros; `Y` + last 4
   characters of the serial; before/after check of 64 points; optional empty GPT; result in the report.
+  **Refresh** (`D` → `R`): rewrite the same data in place (whole disk or only the slow blocks of the
+  last full scan), verified block by block; unreadable blocks skipped; battery warning.
 
 ## Priority 1
 
@@ -74,7 +76,8 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   - write + read-back with checksums over the whole disk: catches disks that read fine but slow down
     on writing, and **fake capacity** (cheap SSD / flash that reports 1 TB but holds 64 GB and
     overwrites itself, like H2testw / f3);
-  - Refresh / Remap: rewrite slow or unreadable sectors so the HDD reallocates them.
+  - Remap: overwrite UNREADABLE sectors (their data is lost anyway) so the HDD reallocates them
+    (Refresh of readable data is done: `D` → `R`).
 - **HPA / DCO check** — one quiet line on the `D` screen, shown only when the visible capacity is
   smaller than the native one (`hdparm -N`, SATA only).
 - **Random seek ("butterfly") test for HDD** — ~1 min, read-only: head positioning time shows worn

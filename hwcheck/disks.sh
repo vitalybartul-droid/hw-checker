@@ -1,9 +1,10 @@
 #!/bin/bash
 # disks.sh — disk check for intake and repair (key D). All checks are READ-ONLY;
-# the only destructive action is E = erase (erase.sh: asks for Y + the serial number).
+# R = refresh (refresh.sh: rewrites the same data in place) and E = erase (erase.sh) write.
 #   Enter = quick check: SMART + read speed + surface scan at ~300 points (about a minute)
 #   F     = full surface scan, Victoria-style latency map of the whole disk
 #   T     = SMART short self-test (the drive tests itself, ~2 min)
+#   R     = REFRESH: read each block and write the same data back (slow SSD zones) - see refresh.sh
 #   E     = ERASE the disk (quick / secure / overwrite) - see erase.sh
 # Result lines are appended to the report (/tmp/hwcheck.txt).
 export LC_ALL=C
@@ -119,6 +120,7 @@ scan() {
     winms=0; winn=0
   }
 
+  SLOWF=/tmp/scan-$DN.slow; : > "$SLOWF.tmp"
   START=$(date +%s); alerts=""
   local stop=0 lost=0
   trap 'stop=1' INT                             # Ctrl+C ends the scan but still prints the result
@@ -131,6 +133,7 @@ scan() {
       elif [ $ms -lt $T2 ]; then lv=1; ok=$((ok+1))
       elif [ $ms -lt $T3 ]; then lv=2; slow=$((slow+1))
       else                       lv=3; vslow=$((vslow+1)); fi
+      [ $lv -ge 2 ] && echo $b >> "$SLOWF.tmp"   # remembered for Refresh (R): slow 32 MiB blocks
     else
       [ $stop = 1 ] && break                    # read interrupted by Ctrl+C, not a disk error
       # Did the disk drop off the bus (USB power / adapter reset)? Then stop instead of drawing X forever.
@@ -237,6 +240,10 @@ scan() {
   [ -n "$warn" ] && [ $bad -eq 0 ] && [ -z "$hung" ] && verdict="$verdict (but:${warn#;})"
   [ "$kp" -gt 0 ] && verdict="$verdict [NVMe lost interrupts: $kp, harmless]"
   printf '  Verdict      : \e[1m%s\e[0m\n' "$verdict"
+  # a completed FULL scan leaves its list of slow blocks for Refresh (R)
+  if [ "$1" = full ] && [ $stop = 0 ] && [ $lost = 0 ]; then mv -f "$SLOWF.tmp" "$SLOWF"; else rm -f "$SLOWF.tmp"; fi
+  [ "$ROT" != 1 ] && [ $nslow -gt 0 ] && [ $bad -eq 0 ] && [ $lost = 0 ] && \
+    echo "  Tip          : R (Refresh) rewrites the data in place - slow zones on SSDs often become fast again."
   report_add "Disk check ($1) $dev $model: ${speed:-?} MB/s, fast=$good slow=$nslow bad=$bad, worst ${worst}ms - $verdict"
 }
 
@@ -269,13 +276,14 @@ while true; do
   t=$(temp_now "$dev")
   echo "  SMART  : $(smart_line "$dev")${t:+   temp ${t}C}${SMARTD:+   (via USB bridge: $SMARTD)}"
   [ -n "$RPM" ] && echo "  Spindle: $RPM"
-  echo "  Checks are READ-ONLY. Only E (erase) writes, and it asks twice."
-  keybar Enter "Quick check (~1 min)" F "Full surface scan" T "SMART self-test (~2 min)" E "Erase disk" Q Back
+  echo "  Checks are READ-ONLY. R rewrites the same data in place; E erases. Both ask first."
+  keybar Enter "Quick check (~1 min)" F "Full surface scan" T "SMART self-test (~2 min)" R "Refresh (keeps data)" E "Erase disk" Q Back
   getkey
   case $KEY in
     "") scan quick; pause ;;
     f)  scan full;  pause ;;
     t)  selftest;   pause ;;
+    r)  bash "$(dirname "$(readlink -f "$0")")/refresh.sh" "$dev" ;;
     e)  bash "$(dirname "$(readlink -f "$0")")/erase.sh" "$dev"
         sz=$(blockdev --getsize64 "$dev" 2>/dev/null || echo "$sz") ;;
     q)  break ;;
