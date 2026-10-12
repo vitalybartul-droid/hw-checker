@@ -1,6 +1,6 @@
 # ui.sh — shared helpers for all hwcheck screens (sourced, not run).
 # One look and one set of rules everywhere:
-#   yellow key chips at the bottom, single keys (no Enter to confirm a choice),
+#   coloured key chips (B in the main menu changes the colours) at the bottom, single keys (no Enter to confirm a choice),
 #   Q or Esc = back, Enter = the default action, digits 1-9 = pick from a list,
 #   Y = confirm something risky.
 
