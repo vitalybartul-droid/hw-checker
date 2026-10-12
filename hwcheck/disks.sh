@@ -133,7 +133,7 @@ scan() {
       elif [ $ms -lt $T2 ]; then lv=1; ok=$((ok+1))
       elif [ $ms -lt $T3 ]; then lv=2; slow=$((slow+1))
       else                       lv=3; vslow=$((vslow+1)); fi
-      [ $lv -ge 2 ] && echo $b >> "$SLOWF.tmp"   # remembered for Refresh (R): slow 32 MiB blocks
+      echo "$b $ms $lv" >> "$SLOWF.tmp"          # every block's read time, for Refresh (R)
     else
       [ $stop = 1 ] && break                    # read interrupted by Ctrl+C, not a disk error
       # Did the disk drop off the bus (USB power / adapter reset)? Then stop instead of drawing X forever.
@@ -241,9 +241,21 @@ scan() {
   [ "$kp" -gt 0 ] && verdict="$verdict [NVMe lost interrupts: $kp, harmless]"
   printf '  Verdict      : \e[1m%s\e[0m\n' "$verdict"
   # a completed FULL scan leaves its list of slow blocks for Refresh (R)
-  if [ "$1" = full ] && [ $stop = 0 ] && [ $lost = 0 ]; then mv -f "$SLOWF.tmp" "$SLOWF"; else rm -f "$SLOWF.tmp"; fi
-  [ "$ROT" != 1 ] && [ $nslow -gt 0 ] && [ $bad -eq 0 ] && [ $lost = 0 ] && \
-    echo "  Tip          : R (Refresh) rewrites the data in place - slow zones on SSDs often become fast again."
+  # "Slow for Refresh" is judged against THIS disk's own typical speed, not only the colour scale:
+  # a block 1.5x slower than the disk's median read (and not fast by the class scale), or any
+  # slow/very slow block. On a disk that tops out near the class limit (e.g. a DRAM-less NVMe at
+  # ~530 MB/s) the orange "ok" zones are exactly the aged ones Refresh fixes.
+  local nref=0 med
+  if [ "$1" = full ] && [ $stop = 0 ] && [ $lost = 0 ]; then
+    med=$(awk '{print $2}' "$SLOWF.tmp" | sort -n | awk '{a[NR]=$1} END{print (NR ? a[int((NR+1)/2)] : 0)}')
+    awk -v m="$med" -v t1="$T1" '$3>=2 || ($2*2 > m*3 && $2 >= t1) {print $1}' "$SLOWF.tmp" > "$SLOWF"
+    nref=$(grep -c . "$SLOWF")
+  fi
+  rm -f "$SLOWF.tmp"
+  if [ "$ROT" != 1 ] && [ $bad -eq 0 ] && [ $lost = 0 ] && [ $nref -gt 0 ] && [ $(( nref * 100 / (i>0?i:1) )) -ge 1 ]; then
+    echo "  Tip          : $nref block(s) are much slower than this disk's typical speed (${med} ms). R (Refresh) rewrites"
+    echo "                 them in place - on SSDs such zones of old data often become fast again."
+  fi
   report_add "Disk check ($1) $dev $model: ${speed:-?} MB/s, fast=$good slow=$nslow bad=$bad, worst ${worst}ms - $verdict"
 }
 

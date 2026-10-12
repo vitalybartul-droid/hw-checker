@@ -40,11 +40,30 @@ echo "  Blocks that cannot be read are skipped (not overwritten) and listed at t
 echo
 nslow=0; [ -f "$SLOWF" ] && nslow=$(grep -c . "$SLOWF")
 if [ -f "$SLOWF" ]; then
-  echo "  Last full scan of this disk found $nslow slow block(s) ($(( nslow * CH / 1024 )) GB)."
+  echo "  Last full scan: $nslow block(s) much slower than this disk's typical speed ($(( nslow * CH / 1024 )) GB)."
 else
   echo "  No full scan of this disk yet: run F first to refresh only the slow zones."
 fi
 echo "  Whole disk: $(( sz / 1000000000 )) GB, three passes per block (read, write, check)."
+# SSD wear cost: every refresh WRITES what it covers. For NVMe, estimate from the drive's own
+# history: life used so far vs how many full-disk writes it has already taken.
+if [ "$ROT" != 1 ]; then
+  smart_detect "$dev" >/dev/null 2>&1
+  sa=$(smartctl $SMARTD -A "$dev" 2>/dev/null)
+  used=$(echo "$sa" | sed -n 's/^Percentage Used: *\([0-9]*\)%.*/\1/p')
+  duw=$(echo "$sa" | sed -n 's/^Data Units Written: *\([0-9,]*\).*/\1/p' | tr -d ,)
+  if [ -n "$used" ] && [ -n "$duw" ] && [ "$duw" -gt 0 ]; then
+    fw10=$(( duw * 512000 * 10 / sz ))                 # full-disk writes so far, x10
+    if [ "$used" -gt 0 ] && [ $fw10 -gt 0 ]; then
+      cost=$(awk -v u=$used -v f=$fw10 'BEGIN{printf "%.2f", u*10/f}')
+      echo "  Wear: life used ${used}% after $(( fw10 / 10 )) full-disk writes -> one whole-disk refresh costs ~${cost}% of its life."
+    else
+      echo "  Wear: life used ${used}% after $(( fw10 / 10 )) full-disk writes. One whole-disk refresh = one more full write."
+    fi
+  else
+    echo "  Wear: one whole-disk refresh = one full write of the SSD (small/cheap SSDs: ~0.1-1% of life). Prefer S."
+  fi
+fi
 on_battery && printf '\n  \e[1;31m!! Running on battery: plug in the charger. A power cut during a write can damage that block.\e[0m\n'
 echo
 args=()
