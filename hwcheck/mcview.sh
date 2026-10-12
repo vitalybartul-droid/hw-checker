@@ -10,6 +10,18 @@ IMG='jpe?g|png|gif|bmp|tiff?|webp'
 OFF='docx?|xlsx?|xlsm|odt|ods|odp|pptx?|rtf'
 
 mode=$1; f=${2:-$MC_EXT_FILENAME}
+LOG=/tmp/mcview.log
+
+# fbi draws on the framebuffer and needs a REAL Linux console. mc runs our command inside its own
+# pseudo-terminal (subshell), so fbi must be told which console to use (-T) - otherwise it exits
+# at once ("not a linux console"). Errors go to the log and are shown, not hidden.
+show() {
+  local vt; vt=$(fgconsole 2>/dev/null); [ -n "$vt" ] || vt=1
+  echo "== $(date +%T) vt=$vt fbi $*" >> "$LOG"
+  fbi -T "$vt" -a "$@" >> "$LOG" 2>&1 && return 0
+  echo; echo "Cannot show it. Last lines of $LOG:"; tail -4 "$LOG" | sed 's/^/  /'
+  printf 'Press any key to return...'; IFS= read -rsn1 _ < /dev/tty
+}
 ext=${f##*.}; ext=${ext,,}
 
 case $mode in
@@ -54,16 +66,15 @@ open)
       [[ ${x##*.} =~ ^($IMG)$ ]] || [[ ${x,,} =~ \.($IMG)$ ]] || continue
       if [ $found = 0 ]; then before+=("$x"); else after+=("$x"); fi
     done < <(find "$dir" -maxdepth 1 -type f -print0 2>/dev/null | sort -z)
-    fbi -a "$f" "${after[@]}" "${before[@]}" 2>/dev/null \
-      || { echo "Cannot show the picture (no framebuffer?)."; sleep 2; }
+    show "$f" "${after[@]}" "${before[@]}"
   elif [ "$ext" = pdf ]; then
     t=$(mktemp -d /tmp/mcv.XXXXXX)
     echo "Preparing pages (up to 20)..."
-    pdftoppm -r 110 -png -l 20 "$f" "$t/p" 2>/dev/null
+    pdftoppm -r 110 -png -l 20 "$f" "$t/p" 2>> "$LOG"
     if ls "$t"/p*.png >/dev/null 2>&1; then
-      fbi -a "$t"/p*.png 2>/dev/null
+      show "$t"/p*.png
     else
-      echo "Cannot render this PDF."; sleep 2
+      echo "Cannot render this PDF (see $LOG)."; sleep 2
     fi
     rm -rf "$t"
   fi
