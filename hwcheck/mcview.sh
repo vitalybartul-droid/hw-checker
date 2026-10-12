@@ -45,7 +45,16 @@ EOF
   ;;
 
 open)
+  # the viewer itself shows no help, so show the keys first (they are hard to remember)
+  hint() {
+    clear
+    printf '\n\n   %s\n\n' "$1"
+    printf '   \e[1mSpace\e[0m or \e[1mFn+Down\e[0m (PgDn) = next      \e[1mFn+Up\e[0m (PgUp) = back\n'
+    printf '   \e[1m+\e[0m / \e[1m-\e[0m = zoom, arrows = move a zoomed picture      \e[1mq\e[0m = back to the file manager\n'
+    sleep 2
+  }
   if [[ $ext =~ ^($IMG)$ ]]; then
+    hint "PHOTOS of this folder, starting with $(basename "$f")"
     # every picture in the same folder, starting with the chosen one
     dir=$(dirname "$f"); before=(); after=(); found=0
     while IFS= read -r -d '' x; do
@@ -53,14 +62,14 @@ open)
       [[ ${x##*.} =~ ^($IMG)$ ]] || [[ ${x,,} =~ \.($IMG)$ ]] || continue
       if [ $found = 0 ]; then before+=("$x"); else after+=("$x"); fi
     done < <(find "$dir" -maxdepth 1 -type f -print0 2>/dev/null | sort -z)
-    fbi -a --noverbose "$f" "${after[@]}" "${before[@]}" 2>/dev/null \
+    fbi -a "$f" "${after[@]}" "${before[@]}" 2>/dev/null \
       || { echo "Cannot show the picture (no framebuffer?)."; sleep 2; }
   elif [ "$ext" = pdf ]; then
     t=$(mktemp -d /tmp/mcv.XXXXXX)
-    echo "Preparing pages..."
+    hint "PDF: $(basename "$f") - preparing pages (up to 20)..."
     pdftoppm -r 110 -png -l 20 "$f" "$t/p" 2>/dev/null
     if ls "$t"/p*.png >/dev/null 2>&1; then
-      fbi -a --noverbose "$t"/p*.png 2>/dev/null
+      fbi -a "$t"/p*.png 2>/dev/null
     else
       echo "Cannot render this PDF."; sleep 2
     fi

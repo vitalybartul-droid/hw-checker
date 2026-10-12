@@ -702,7 +702,7 @@ while true; do
     v|V)  bash "$T/screentest.sh"; show ;;
     d|D)  bash "$T/disks.sh"; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
-    l|L)  colorize "$OUT" | less -R -Q -P'  Up/Down PgUp/PgDn = scroll     q = back to the report '; show ;;
+    l|L)  colorize "$OUT" | less -R -Q -P'  Up/Down = line   Space or Fn+Down = page down   Fn+Up = page up   q = back to the report '; show ;;
     +|=)  if [ ${#SIZES[@]} -gt 1 ] && [ "$FIDX" -lt $(( ${#SIZES[@]} - 1 )) ]; then
             FIDX=$((FIDX+1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the largest size
