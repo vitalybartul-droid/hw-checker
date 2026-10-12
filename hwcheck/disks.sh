@@ -6,6 +6,7 @@
 #   S     = seek test (HDD only): random reads, head positioning time
 #   T     = SMART short self-test (the drive tests itself, ~2 min)
 #   R     = REFRESH: read each block and write the same data back (slow SSD zones) - see refresh.sh
+#   M     = REMAP (HDD): write zeros only to unreadable sectors so the drive swaps them - see remap.sh
 #   E     = ERASE the disk (quick / secure / overwrite) - see erase.sh
 # Result lines are appended to the report (/tmp/hwcheck.txt).
 export LC_ALL=C
@@ -122,6 +123,7 @@ scan() {
   }
 
   SLOWF=/tmp/scan-$DN.slow; : > "$SLOWF.tmp"
+  BADF=/tmp/scan-$DN.bad                         # unreadable blocks, for Remap (M); kept per disk
   START=$(date +%s); alerts=""
   local stop=0 lost=0
   trap 'stop=1' INT                             # Ctrl+C ends the scan but still prints the result
@@ -142,6 +144,7 @@ scan() {
         lost=1; break
       fi
       lv=4; bad=$((bad+1)); badlist="$badlist $(( b*CHUNK/1024 ))G"
+      echo $b >> "$BADF"
     fi
     i=$((i+1)); cn=$((cn+1)); [ $lv -gt $cw ] && cw=$lv
     [ $cn -ge $K ] && drawcell
@@ -332,6 +335,9 @@ seektest() {
   elif [ $avg -gt $lim ]; then v="heads slower than typical for a $typ - mild wear, or a slow USB adapter"
   else v="heads OK (normal for a $typ)"; fi
   [ $stop = 1 ] && v="$v (stopped early)"
+  # heads OK does not mean the disk is OK: the surface may have unreadable sectors in one spot
+  local pb=""; pb=$(smart_vals "$dev" | awk -F= '($1=="pending"||$1=="uncorr") && $2+0>0 {printf " %s=%s", $1, $2}')
+  [ -n "$pb" ] && v="$v - BUT SMART reports unreadable sectors ($pb ) - surface problem: run F, then M (remap)"
   printf '  Verdict      : \e[1m%s\e[0m\n' "$v"
   report_add "Seek test    : $dev $model: avg $(awk -v a=$avg 'BEGIN{printf "%.1f", a/1000}') ms, p95 $(awk -v a=$p95 'BEGIN{printf "%.1f", a/1000}') ms, >100ms $s100 - $v"
 }
@@ -340,16 +346,26 @@ seektest() {
 selftest() {
   clear; title "SMART SELF-TEST - $dev $model"
   have smartctl || { echo "  smartctl is not available."; return; }
-  if ! smartctl $SMARTD -t short "$dev" >/dev/null 2>&1; then echo "  This drive (or its USB bridge) does not support a self-test."; return; fi
-  local i st pr res h
-  for i in $(seq 1 60); do                     # up to 5 minutes
-    sleep 5
+  # Short = electronics + a small sample of the surface (~2 min): it can PASS on a disk with a few
+  # bad sectors. Extended = the drive reads its WHOLE surface itself (HDD ~1-3 h, SSD minutes).
+  local typ=short mins
+  mins=$(smartctl $SMARTD -c "$dev" 2>/dev/null | sed -n 's/.*Extended self-test routine.*(\ *\([0-9]*\)).*/\1/p; /Extended self-test routine/{n;s/.*( *\([0-9]*\)) minutes.*/\1/p}' | head -1)
+  echo "  Short    : ~2 min, electronics + a sample of the surface (can miss a few bad sectors)"
+  echo "  Extended : the drive reads its whole surface itself${mins:+, ~$mins min}"
+  keybar Enter "Short" L "Extended" Q Back
+  while :; do getkey; case $KEY in "") break ;; l) typ=long; break ;; q) return ;; esac; done
+  if ! smartctl $SMARTD -t $typ "$dev" >/dev/null 2>&1; then echo "  This drive (or its USB bridge) does not support this self-test."; return; fi
+  local i=0 st pr res h
+  while :; do                                   # until the drive reports it finished (Q = stop waiting)
+    IFS= read -rsn1 -t 5 k && [ "${k,,}" = q ] && { smartctl $SMARTD -X "$dev" >/dev/null 2>&1; echo; echo "  Self-test aborted."; return; }
+    i=$((i+1))
     st=$(smartctl $SMARTD -c -l selftest "$dev" 2>/dev/null)
     # NVMe prints "No self-test in progress" when idle: that line must not count as running
     if echo "$st" | grep -i 'in progress' | grep -qvi 'no self-test in progress'; then
       pr=$(echo "$st" | grep -oiE '[0-9]+% (of test remaining|completed)' | head -1)
-      printf '\r\e[K  Running... %s (%ds)' "$pr" $(( i * 5 ))
+      printf '\r\e[K  Running %s test... %s (%d min)   Q = abort' "$typ" "$pr" $(( i * 5 / 60 ))
     else break; fi
+    [ $i -gt 8640 ] && break                    # 12 h safety limit
   done
   printf '\r\e[K'
   res=$(smartctl $SMARTD -l selftest "$dev" 2>/dev/null | grep -E '^ *#? *[0-9]+ +(Short|Extended|Offline)' | head -1 | sed -E 's/^ *#? *[0-9]+ +//; s/ {2,}/  /g')
@@ -369,14 +385,27 @@ while true; do
   echo "  Checks are READ-ONLY. R rewrites the same data in place; E erases. Both ask first."
   kb=(Enter "Quick check (~1 min)" F "Full surface scan")
   [ "$ROT" = 1 ] && kb+=(S "Seek test (heads, ~30 s)")
-  kb+=(T "SMART self-test" R "Refresh (keeps data)" E "Erase disk" Q Back)
+  kb+=(T "SMART self-test" R "Refresh (keeps data)")
+  [ "$ROT" = 1 ] && kb+=(M "Remap bad sectors")
+  kb+=(E "Erase disk")
+  [ "$TRAN" = usb ] && kb+=(X "Eject (safe to unplug)")
+  kb+=(Q Back)
   keybar "${kb[@]}"
   getkey
   case $KEY in
     "") scan quick; pause ;;
     f)  scan full;  pause ;;
-    t)  selftest;   pause ;;
+    t)  selftest;   pause ;;   # Enter = short, L = extended (whole surface)
     s)  [ "$ROT" = 1 ] && { seektest; pause; } ;;
+    x)  [ "$TRAN" = usb ] || continue
+        # nothing here mounts the disk, but file rescue may have: release it, flush, and power the
+        # disk down (an HDD parks its heads) so it can be unplugged safely
+        for p in $(lsblk -lnpo NAME "$dev" | tail -n +2); do findmnt -rn -S "$p" >/dev/null 2>&1 && umount "$p" 2>/dev/null; done
+        sync
+        if lsblk -lnpo MOUNTPOINT "$dev" | grep -q .; then echo "  A partition is still in use - close it first."; pause; continue; fi
+        echo 1 > "/sys/block/$(basename "$dev")/device/delete" 2>/dev/null
+        printf '\n  \e[1;32m%s %s is switched off - safe to unplug.\e[0m\n' "$dev" "$model"; pause; break ;;
+    m)  [ "$ROT" = 1 ] && bash "$(dirname "$(readlink -f "$0")")/remap.sh" "$dev" ;;
     r)  bash "$(dirname "$(readlink -f "$0")")/refresh.sh" "$dev" ;;
     e)  bash "$(dirname "$(readlink -f "$0")")/erase.sh" "$dev"
         sz=$(blockdev --getsize64 "$dev" 2>/dev/null || echo "$sz") ;;

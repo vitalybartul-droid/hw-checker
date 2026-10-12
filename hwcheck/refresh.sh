@@ -97,7 +97,7 @@ dd if="$dev" of=/dev/null bs=1M count=1 iflag=direct status=none 2>/dev/null || 
 if [ $MODE = slow ]; then list=$(sort -n -u "$SLOWF"); else list=$(seq 0 $(( total - 1 ))); fi
 todo=$(printf '%s\n' "$list" | grep -c .)
 
-done_n=0 okn=0 unread=0 werr=0 vfail=0 badlist="" stop=0 r1ms=0 r2ms=0 mbdone=0 lastp=0
+lost=0 done_n=0 okn=0 unread=0 werr=0 vfail=0 badlist="" stop=0 r1ms=0 r2ms=0 mbdone=0 lastp=0
 st=$(date +%s)
 trap 'stop=1' INT                               # Ctrl+C: finish the current block, then stop
 echo; printf '\e[?25l'
@@ -108,6 +108,11 @@ for b in $list; do
   # each dd ignores Ctrl+C itself, so a block is never left half-written by the keypress
   t0=$(date +%s%N)
   if ! ( trap '' INT; dd if="$dev" of="$BUF" bs=1M count=$n skip=$(( b*CH )) $ID status=none 2>/dev/null ); then
+    # the disk dropped off (USB reset, hung on a bad sector)? stop instead of "failing" every block
+    if [ ! -b "$dev" ] || [ -z "$(blockdev --getsize64 "$dev" 2>/dev/null)" ]; then
+      printf '\e[?25h\n\n  \e[1;37;41m STOPPED: the disk disappeared at %s GB \e[0m (hung on a bad sector or USB power/adapter reset)\n' "$(( b*CH/1024 ))"
+      stop=1; lost=1; break
+    fi
     unread=$((unread+1)); badlist="$badlist $(( b*CH/1024 ))G"; continue
   fi
   t1=$(date +%s%N); r1ms=$(( r1ms + (t1-t0)/1000000 ))
@@ -144,12 +149,13 @@ sync
 sp1="-"; sp2="-"
 [ $r1ms -gt 0 ] && sp1=$(( mbdone * 1049 / r1ms ))
 [ $r2ms -gt 0 ] && sp2=$(( mbdone * 1049 / r2ms ))
-echo "  Refreshed    : $okn of $todo blocks ($(( mbdone / 1024 )) GB) in $(elapsed $st)$([ $stop = 1 ] && echo '  - STOPPED by Ctrl+C')"
+echo "  Refreshed    : $okn of $todo blocks ($(( mbdone / 1024 )) GB) in $(elapsed $st)$([ $stop = 1 ] && [ $lost = 0 ] && echo '  - STOPPED by Ctrl+C')"
 echo "  Read speed   : before ${sp1} MB/s  ->  check read ${sp2} MB/s   (right after writing; the next F scan is the real comparison)"
 [ $unread -gt 0 ] && printf '  \e[1;31mUnreadable   : %d block(s), skipped, data there is already damaged\e[0m\n' $unread
 [ $werr -gt 0 ]   && printf '  \e[1;31mWrite errors : %d block(s) - the disk refuses writes there\e[0m\n' $werr
 [ -n "$badlist" ] && echo "  Near         :$badlist"
-if [ $vfail -gt 0 ]; then res="FAILED - data read back different, disk unreliable"
+if [ $lost = 1 ]; then res="STOPPED - the disk dropped off; reconnect (SATA or a powered adapter) before trusting it"
+elif [ $vfail -gt 0 ]; then res="FAILED - data read back different, disk unreliable"
 elif [ $unread -gt 0 ] || [ $werr -gt 0 ]; then res="done with $(( unread + werr )) bad block(s) skipped - disk is failing"
 elif [ $stop = 1 ]; then res="stopped by user"
 else res="done, no errors"; fi
