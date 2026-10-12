@@ -69,6 +69,7 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   characters of the serial; before/after check of 64 points; optional empty GPT; result in the report.
   **Refresh** (`D` → `R`): rewrite the same data in place (whole disk or only the slow blocks of the
   last full scan), verified block by block; unreadable blocks skipped; battery warning.
+  **HDD seek test** (`D` → `S`), **HPA/DCO** hidden-capacity line, key colour schemes (`B`).
 
 ## Priority 1
 
@@ -78,10 +79,6 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
     overwrites itself, like H2testw / f3);
   - Remap: overwrite UNREADABLE sectors (their data is lost anyway) so the HDD reallocates them
     (Refresh of readable data is done: `D` → `R`).
-- **HPA / DCO check** — one quiet line on the `D` screen, shown only when the visible capacity is
-  smaller than the native one (`hdparm -N`, SATA only).
-- **Random seek ("butterfly") test for HDD** — ~1 min, read-only: head positioning time shows worn
-  mechanics even when sequential reading is fine.
 - **Disk cloning (Ghost-style)** — clone disk→disk and disk→image with `partclone`
   (used by Clonezilla), progress display, verify after clone.
 - **Partition tools** — show and edit partition tables with `parted` / `sfdisk`

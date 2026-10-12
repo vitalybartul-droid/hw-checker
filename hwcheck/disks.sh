@@ -3,6 +3,7 @@
 # R = refresh (refresh.sh: rewrites the same data in place) and E = erase (erase.sh) write.
 #   Enter = quick check: SMART + read speed + surface scan at ~300 points (about a minute)
 #   F     = full surface scan, Victoria-style latency map of the whole disk
+#   S     = seek test (HDD only): random reads, head positioning time
 #   T     = SMART short self-test (the drive tests itself, ~2 min)
 #   R     = REFRESH: read each block and write the same data back (slow SSD zones) - see refresh.sh
 #   E     = ERASE the disk (quick / secure / overwrite) - see erase.sh
@@ -259,6 +260,82 @@ scan() {
   report_add "Disk check ($1) $dev $model: ${speed:-?} MB/s, fast=$good slow=$nslow bad=$bad, worst ${worst}ms - $verdict"
 }
 
+# ---------- HPA / DCO: part of the disk hidden from the system (SATA only) ----------
+# HPA = Host Protected Area (set by some OEM recovery tools or malware), DCO = Device Configuration
+# Overlay (capacity cut by the vendor or by someone selling a "smaller" disk). Quiet when nothing hidden.
+HPA=""
+hpa_check() {
+  case $TRAN in sata|ata) ;; *) return ;; esac
+  command -v hdparm >/dev/null 2>&1 || return
+  local n cur nat real
+  n=$(hdparm -N "$dev" 2>/dev/null | sed -n 's/.*max sectors *= *\([0-9]*\)\/\([0-9]*\).*/\1 \2/p')
+  read -r cur nat <<< "$n"
+  if [ -n "$cur" ] && [ -n "$nat" ] && [ "$nat" -gt "$cur" ]; then
+    HPA="HPA hides $(( (nat - cur) * 512 / 1000000000 )) GB ($cur of $nat sectors visible) - removable with hdparm -N"
+  fi
+  real=$(hdparm --dco-identify "$dev" 2>/dev/null | sed -n 's/.*Real max sectors: *\([0-9]*\).*/\1/p')
+  if [ -n "$real" ] && [ -n "$nat" ] && [ "$real" -gt "$nat" ]; then
+    HPA="${HPA:+$HPA; }DCO hides $(( (real - nat) * 512 / 1000000000 )) GB (disk is really $(( real * 512 / 1000000000 )) GB)"
+  fi
+}
+hpa_check
+
+# ---------- HDD seek test: how fast the heads move ----------
+# 1000 random 4 KiB reads across the whole disk. Access time = head seek + half a rotation.
+# A healthy laptop HDD is ~12-20 ms; worn mechanics show a higher average and many very slow
+# seeks (the drive retries positioning) even when sequential reading looks fine.
+seektest() {
+  clear; title "SEEK TEST - $dev $model${RPM:+, $RPM}"
+  echo "  1000 random reads across the whole disk: measures how fast the heads move. Read-only."
+  echo
+  local n=1000 i total r t0 t1 us sum=0 max=0 s100=0 s500=0 err=0 oh=0 lst=() stop=0
+  local ID=iflag=direct
+  dd if="$dev" of=/dev/null bs=4096 count=1 iflag=direct status=none 2>/dev/null || ID=""
+  # calibration: re-reading one sector comes from the drive cache, so what remains is the
+  # cost of starting dd itself (slow CPUs: 1-3 ms) - subtracted from every measurement
+  local c=()
+  for i in 1 2 3 4 5 6 7 8 9 10 11; do
+    t0=$(date +%s%N); dd if="$dev" of=/dev/null bs=4096 count=1 $ID status=none 2>/dev/null; t1=$(date +%s%N)
+    c+=($(( (t1 - t0) / 1000 )))
+  done
+  oh=$(printf '%s\n' "${c[@]:1}" | sort -n | sed -n 5p)    # median of 10 (first run warms up)
+  total=$(( sz / 4096 ))
+  trap 'stop=1' INT
+  printf '\e[?25l'
+  for (( i = 1; i <= n && stop == 0; i++ )); do
+    r=$(( ((RANDOM << 30) | (RANDOM << 15) | RANDOM) % total ))
+    t0=$(date +%s%N)
+    dd if="$dev" of=/dev/null bs=4096 count=1 skip=$r $ID status=none 2>/dev/null || err=$((err+1))
+    t1=$(date +%s%N)
+    us=$(( (t1 - t0) / 1000 - oh )); [ $us -lt 0 ] && us=0
+    lst+=($us); sum=$(( sum + us )); [ $us -gt $max ] && max=$us
+    [ $us -gt 100000 ] && s100=$((s100+1)); [ $us -gt 500000 ] && s500=$((s500+1))
+    [ $(( i % 25 )) -eq 0 ] && printf '\r\e[K  %4d / %d   average %s ms   slowest %d ms   >100 ms: %d' \
+      $i $n "$(awk -v s=$sum -v k=$i 'BEGIN{printf "%.1f", s/k/1000}')" $(( max / 1000 )) $s100
+  done
+  trap - INT; printf '\e[?25h\n\n'
+  local k=${#lst[@]}; [ $k -eq 0 ] && return
+  local avg p95 lim=22000 typ="laptop HDD"
+  avg=$(( sum / k ))
+  p95=$(printf '%s\n' "${lst[@]}" | sort -n | sed -n "$(( (k * 95 + 99) / 100 ))p")
+  case $RPM in *7200*) lim=18000; typ="7200 rpm" ;; *5400*) lim=22000; typ="5400 rpm" ;; *4200*) lim=26000; typ="4200 rpm" ;; esac
+  [ "$TRAN" = usb ] && lim=$(( lim + 2000 ))      # USB adapters add a little latency
+  printf '  Access time  : average %s ms, 95%% within %s ms, slowest %s ms   (%d reads, start-up %s ms subtracted)\n' \
+    "$(awk -v a=$avg 'BEGIN{printf "%.1f", a/1000}')" "$(awk -v a=$p95 'BEGIN{printf "%.1f", a/1000}')" $(( max / 1000 )) $k \
+    "$(awk -v a=$oh 'BEGIN{printf "%.1f", a/1000}')"
+  echo "  Very slow    : $s100 over 100 ms, $s500 over 500 ms   (healthy: almost none)"
+  [ $err -gt 0 ] && printf '  \e[1;31mRead errors  : %d\e[0m\n' $err
+  local v
+  if [ $err -gt 0 ]; then v="READ ERRORS during seeking - disk is failing"
+  elif [ $(( s100 * 100 )) -gt $(( k * 2 )) ] || [ $s500 -gt 2 ]; then v="heads struggling - many very slow seeks (retries), mechanics wearing out"
+  elif [ $avg -gt $(( lim * 3 / 2 )) ]; then v="heads very slow (average far above normal for a $typ) - worn mechanics"
+  elif [ $avg -gt $lim ]; then v="heads slower than typical for a $typ - mild wear, or a slow USB adapter"
+  else v="heads OK (normal for a $typ)"; fi
+  [ $stop = 1 ] && v="$v (stopped early)"
+  printf '  Verdict      : \e[1m%s\e[0m\n' "$v"
+  report_add "Seek test    : $dev $model: avg $(awk -v a=$avg 'BEGIN{printf "%.1f", a/1000}') ms, p95 $(awk -v a=$p95 'BEGIN{printf "%.1f", a/1000}') ms, >100ms $s100 - $v"
+}
+
 # ---------- SMART short self-test ----------
 selftest() {
   clear; title "SMART SELF-TEST - $dev $model"
@@ -288,13 +365,18 @@ while true; do
   t=$(temp_now "$dev")
   echo "  SMART  : $(smart_line "$dev")${t:+   temp ${t}C}${SMARTD:+   (via USB bridge: $SMARTD)}"
   [ -n "$RPM" ] && echo "  Spindle: $RPM"
+  [ -n "$HPA" ] && printf '  \e[1;33mHidden : %s\e[0m\n' "$HPA"
   echo "  Checks are READ-ONLY. R rewrites the same data in place; E erases. Both ask first."
-  keybar Enter "Quick check (~1 min)" F "Full surface scan" T "SMART self-test (~2 min)" R "Refresh (keeps data)" E "Erase disk" Q Back
+  kb=(Enter "Quick check (~1 min)" F "Full surface scan")
+  [ "$ROT" = 1 ] && kb+=(S "Seek test (heads, ~30 s)")
+  kb+=(T "SMART self-test" R "Refresh (keeps data)" E "Erase disk" Q Back)
+  keybar "${kb[@]}"
   getkey
   case $KEY in
     "") scan quick; pause ;;
     f)  scan full;  pause ;;
     t)  selftest;   pause ;;
+    s)  [ "$ROT" = 1 ] && { seektest; pause; } ;;
     r)  bash "$(dirname "$(readlink -f "$0")")/refresh.sh" "$dev" ;;
     e)  bash "$(dirname "$(readlink -f "$0")")/erase.sh" "$dev"
         sz=$(blockdev --getsize64 "$dev" 2>/dev/null || echo "$sz") ;;

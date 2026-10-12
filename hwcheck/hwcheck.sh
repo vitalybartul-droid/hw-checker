@@ -637,6 +637,15 @@ summary() {
     case $vd in *"SMART bad sectors"*)  warns+=("$dv: SMART reports pending / uncorrectable sectors") ;; esac
   done < <(sed -n 's/^Disk check ([a-z]*) \(\/dev\/[^ ]*\) .*worst [0-9]*ms - \(.*\)$/\1 \2/p' "$f" | awk '{v[$1]=$0} END{for (d in v) print v[d]}')
   grep -qiE 'Self-test *:.*fail' "$f"                && issues+=("disk self-test failed")
+  # HDD seek test: latest result per disk
+  while read -r dv vd; do
+    case $vd in
+      *"READ ERRORS"*)       issues+=("$dv: read errors in the seek test") ;;
+      *"heads struggling"*|*"heads very slow"*) issues+=("$dv: HDD heads/mechanics worn (seek test)") ;;
+      *"heads slower"*)      warns+=("$dv: HDD seeks slower than typical") ;;
+    esac
+  done < <(sed -n 's/^Seek test *: \(\/dev\/[^ ]*\) .* - \(heads.*\|READ ERRORS.*\)$/\1 \2/p' "$f" | awk '{v[$1]=$0} END{for (d in v) print v[d]}')
+  grep -q '^Disk erase.*NOT fully erased' "$f"        && warns+=("a disk erase did not remove all data")
   grep -q 'Boot RAM test : !!!' "$f"                 && issues+=("RAM errors at boot test")
   grep -q 'RAM test.*FAILED' "$f"                    && issues+=("RAM test FAILED")
   grep -q '^TPM *: not found' "$f"                   && warns+=("no TPM (check BIOS) - needed for Windows 11")
@@ -661,7 +670,7 @@ summary() {
 show() { clear; colorize "$OUT"; summary; }
 . "$(dirname "$(readlink -f "$0")")/ui.sh"
 menu() {
-  local a=("Enter x2" "Power off" K Keyboard C Charger V Screen D Disks M RAM L Scroll R Repair)
+  local a=("Enter x2" "Power off" K Keyboard C Charger V Screen D Disks M RAM L Scroll R Repair B Colours)
   [ ${#SIZES[@]} -gt 1 ] && a+=("+/-" "Text size")
   keybar "${a[@]}"
 }
@@ -701,6 +710,7 @@ while true; do
             FIDX=$((FIDX-1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the smallest size
     r|R)  bash "$T/repair.sh"; show ;;
+    b|B)  next_keys; show; printf '  Key colours: %s (B = next)\n' "${KEYNAMES[$KEYIDX]}" ;;
     *)    redraw=0 ;;                          # ignore other keys, keep the screen as is
   esac
 done
