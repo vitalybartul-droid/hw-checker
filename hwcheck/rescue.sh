@@ -20,9 +20,15 @@ mount_one(){  # $1 dev  $2 fstype  $3 ro|rw  -> prints mountpoint on success
   local dev=$1 fs=$2 mode=$3 mp; mp="$MNT/$(basename "$dev")"; mkdir -p "$mp"
   mountpoint -q "$mp" && umount "$mp" 2>/dev/null
   if [ "$fs" = ntfs ]; then
-    if [ "$mode" = rw ]; then
-      # ntfs-3g opens "dirty" NTFS (Fast Startup / pulled drive) read-write; kernel ntfs3 would fall back to ro
-      ntfs-3g "$dev" "$mp" 2>>"$LOG" || mount -t ntfs3 -o rw,force "$dev" "$mp" 2>>"$LOG" || mount -t ntfs3 -o ro "$dev" "$mp" 2>>"$LOG"
+    if [ "$mode" = rwhib ]; then
+      # Only after the user confirmed: drop the saved Windows session (hiberfile) and open rw.
+      # This is ntfs-3g's own safe path; we never use ntfs3 "force", which can corrupt the FS.
+      ntfs-3g -o remove_hiberfile "$dev" "$mp" 2>>"$LOG"
+    elif [ "$mode" = rw ]; then
+      # Plain ntfs-3g opens a cleanly shut-down NTFS read-write. A "dirty" volume
+      # (Fast Startup / hibernated / pulled drive) is NOT forced: it falls back to read-only,
+      # so we never risk the customer's filesystem. Use W to drop hibernation on purpose.
+      ntfs-3g "$dev" "$mp" 2>>"$LOG" || mount -t ntfs3 -o ro "$dev" "$mp" 2>>"$LOG"
     else
       mount -t ntfs3 -o ro "$dev" "$mp" 2>/dev/null || ntfs-3g -o ro "$dev" "$mp" 2>/dev/null
     fi
@@ -97,8 +103,21 @@ make_writable(){
   keybar Y "Yes, open for writing" Q Cancel
   getkey; [ "$KEY" = y ] || return
   new=$(mount_one "$dev" "$fs" rw)
+  if [ -n "$new" ] && writable "$new"; then
+    echo "  $dev is now WRITABLE."; echo "    -> $dev is now open for WRITING" >>"$TBL"; sleep 2; return
+  fi
+  # Plain rw failed -> volume is dirty/hibernated. For NTFS, offer to drop the saved session.
+  mount_one "$dev" "$fs" ro >/dev/null       # re-open read-only so it stays browsable
+  if [ "$fs" != ntfs ]; then echo "  Could not open it for writing."; sleep 2; return; fi
+  echo
+  echo "  This NTFS is 'dirty' - Windows is hibernated or Fast Startup is on."
+  echo "  Opening it will DISCARD the saved Windows session (the hiberfile), not your files."
+  echo "  The next Windows start will be a normal full boot. BitLocker drives are not touched."
+  keybar Y "Discard saved session and open for writing" Q Cancel
+  getkey; [ "$KEY" = y ] || { echo "  Left read-only."; sleep 2; return; }
+  new=$(mount_one "$dev" "$fs" rwhib)
   if [ -n "$new" ] && writable "$new"; then echo "  $dev is now WRITABLE."; echo "    -> $dev is now open for WRITING" >>"$TBL"
-  else echo "  Could not open it for writing (dirty NTFS? turn off Fast Startup in Windows)."; fi
+  else echo "  Still could not open it for writing (see /tmp/rescue.log)."; mount_one "$dev" "$fs" ro >/dev/null; fi
   sleep 2
 }
 

@@ -48,8 +48,9 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   - **File rescue (mc)** — auto-mounts internal partitions read-only and USB drives read-write,
     lists every partition with its type, flags BitLocker volumes, can switch one internal disk to
     read-write for repair (W), rescan after plugging a USB drive (U); opens mc on the mounts.
-  - **Windows password reset** — clears a LOCAL account password (chntpw); Microsoft accounts
-    and BitLocker drives detected and refused.
+  - **Windows password reset** — clears a LOCAL account password (chntpw). BitLocker system
+    drives are detected and skipped. Microsoft (online) accounts cannot be reset this way and
+    the screen warns about it (they are listed but clearing their SAM hash does not help login).
 
 - **v1.3** — one consistent UI: shared `ui.sh` (key chips, `Q`/`Esc` = back everywhere, digits
   to pick, no typing). Disk test and surface scan merged into `D` (quick check ~1 min / full scan /

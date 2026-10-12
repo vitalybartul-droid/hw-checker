@@ -27,7 +27,9 @@ done < <(lsblk -pnro NAME,FSTYPE 2>/dev/null)
 [ -z "$windev" ] && { echo "  No Windows found (no readable SAM). The drive may be BitLocker-encrypted."; pause; exit 1; }
 
 echo "  Windows system drive: $windev"
-{ ntfs-3g -o remove_hiberfile,recover "$windev" "$MNT" 2>/dev/null || mount -t ntfs3 -o rw,force "$windev" "$MNT" 2>/dev/null; } || { echo "  Cannot mount read-write."; echo "  NTFS is 'dirty' - in Windows turn off Fast Startup, or shut down fully, then retry."; pause; exit 1; }
+# remove_hiberfile discards a saved Windows session (safe); recover replays the NTFS journal.
+# We never use ntfs3 "force", which can corrupt a dirty filesystem.
+ntfs-3g -o remove_hiberfile,recover "$windev" "$MNT" 2>/dev/null || { echo "  Cannot mount read-write."; echo "  The drive may be BitLocker-encrypted, or NTFS is damaged. Run chkdsk in Windows, then retry."; pause; exit 1; }
 cfg="$MNT/Windows/System32/config"
 # chntpw -l lists accounts as:  | 03e9 | user name | ADMIN | dis/lock |
 mapfile -t ACC < <(chntpw -l "$cfg/SAM" 2>/dev/null | awk -F'|' '$2 ~ /^ *[0-9a-fA-F]+ *$/ {
@@ -41,6 +43,8 @@ for a in "${ACC[@]}"; do
   printf '    %s %d %s  %-24s %-6s %s\n' "$KEYC" $i "$KEYN" "$name" "$adm" "$lock"; i=$((i+1))
 done
 echo "  (\"dis\" = account disabled - clearing its password will not enable it)"
+echo "  Local accounts only. If an account is a Microsoft (online) login, clearing does nothing -"
+echo "  the real password lives on Microsoft's servers, not in this SAM."
 keybar 1-${#ACC[@]} "Clear this password" Q Cancel
 while :; do
   getkey
