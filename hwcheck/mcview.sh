@@ -12,13 +12,14 @@ OFF='docx?|xlsx?|xlsm|odt|ods|odp|pptx?|rtf'
 mode=$1; f=${2:-$MC_EXT_FILENAME}
 LOG=/tmp/mcview.log
 
-# fbi draws on the framebuffer and needs a REAL Linux console. mc runs our command inside its own
-# pseudo-terminal (subshell), so fbi must be told which console to use (-T) - otherwise it exits
-# at once ("not a linux console"). Errors go to the log and are shown, not hidden.
+# fbi draws on the framebuffer and needs a REAL Linux console on stdin. mc runs our command inside
+# its own pseudo-terminal, so we hand fbi the console itself (/dev/ttyN) as stdin/stdout.
+# NOT "fbi -T N": with -T fbi forks into the background and returns at once - mc and fbi then
+# fight over the screen and keyboard, and temporary PDF pages are deleted while fbi still loads them.
 show() {
   local vt; vt=$(fgconsole 2>/dev/null); [ -n "$vt" ] || vt=1
   echo "== $(date +%T) vt=$vt fbi $*" >> "$LOG"
-  fbi -T "$vt" -a "$@" >> "$LOG" 2>&1 && return 0
+  fbi -a "$@" < "/dev/tty$vt" > "/dev/tty$vt" 2>> "$LOG" && return 0
   echo; echo "Cannot show it. Last lines of $LOG:"; tail -4 "$LOG" | sed 's/^/  /'
   printf 'Press any key to return...'; IFS= read -rsn1 _ < /dev/tty
 }

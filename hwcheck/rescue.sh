@@ -19,21 +19,27 @@ writable(){ touch "$1/.hwrw$$" 2>/dev/null && { rm -f "$1/.hwrw$$" 2>/dev/null; 
 mount_one(){  # $1 dev  $2 fstype  $3 ro|rw  -> prints mountpoint on success
   local dev=$1 fs=$2 mode=$3 mp; mp="$MNT/$(basename "$dev")"; mkdir -p "$mp"
   mountpoint -q "$mp" && umount "$mp" 2>/dev/null
+  # Windows disks show every file as "executable": mc would then RUN a .txt with Enter instead of
+  # showing it. Mount without exec bits (fmask) and with noexec - files open in the viewer instead.
+  local NX=noexec,fmask=0133,dmask=0022
   if [ "$fs" = ntfs ]; then
     if [ "$mode" = rwhib ]; then
       # Only after the user confirmed: drop the saved Windows session (hiberfile) and open rw.
       # This is ntfs-3g's own safe path; we never use ntfs3 "force", which can corrupt the FS.
-      ntfs-3g -o remove_hiberfile "$dev" "$mp" 2>>"$LOG"
+      ntfs-3g -o remove_hiberfile,$NX "$dev" "$mp" 2>>"$LOG"
     elif [ "$mode" = rw ]; then
       # Plain ntfs-3g opens a cleanly shut-down NTFS read-write. A "dirty" volume
       # (Fast Startup / hibernated / pulled drive) is NOT forced: it falls back to read-only,
       # so we never risk the customer's filesystem. Use W to drop hibernation on purpose.
-      ntfs-3g "$dev" "$mp" 2>>"$LOG" || mount -t ntfs3 -o ro "$dev" "$mp" 2>>"$LOG"
+      ntfs-3g -o $NX "$dev" "$mp" 2>>"$LOG" || mount -t ntfs3 -o ro,$NX "$dev" "$mp" 2>>"$LOG"
     else
-      mount -t ntfs3 -o ro "$dev" "$mp" 2>/dev/null || ntfs-3g -o ro "$dev" "$mp" 2>/dev/null
+      mount -t ntfs3 -o ro,$NX "$dev" "$mp" 2>/dev/null || ntfs-3g -o ro,$NX "$dev" "$mp" 2>/dev/null
     fi
   else
-    mount -o "$mode" "$dev" "$mp" 2>/dev/null
+    case $fs in
+      vfat|exfat) mount -o "$mode,$NX" "$dev" "$mp" 2>/dev/null ;;
+      *)          mount -o "$mode,noexec" "$dev" "$mp" 2>/dev/null ;;
+    esac
   fi
   mountpoint -q "$mp" && echo "$mp"
 }
