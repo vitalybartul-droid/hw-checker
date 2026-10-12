@@ -46,7 +46,7 @@ For working on **customer** machines:
 
 | Key | Tool |
 |-----|------|
-| `F` | File rescue: internal disks open **read-only** (service partitions skipped), USB drives and USB SSD/HDD enclosures open read-write, USB disks with Windows stay read-only; opens Midnight Commander on the Windows partition. `W` = make an internal disk writable for repair, `U` = rescan |
+| `F` | File rescue: internal disks open **read-only** (service partitions skipped), USB drives and USB SSD/HDD enclosures open read-write, USB disks with Windows stay read-only; opens Midnight Commander on the Windows partition. In mc, `Enter` on a photo or PDF shows it full screen (all photos of the folder, `PgDn`/`PgUp`), `F3`/`Enter` on Word, Excel, OpenOffice shows the text. `W` = make an internal disk writable for repair, `U` = rescan |
 | `P` | Windows password: pick a **local** account from the list, its password is cleared (chntpw) |
 | `X` | Linux shell (`exit` comes back) |
 

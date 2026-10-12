@@ -129,6 +129,7 @@ while true; do
   cat "$TBL"
   echo
   echo "  mc keys: Tab = other panel, F5 = copy, Insert = select, F3 = view, F10 = back here."
+  echo "  Enter on a photo or PDF = full screen (PgDn/Space next, PgUp back, q = return); Word/Excel = text."
   keybar Enter "Open mc" W "Make a disk writable" U "Rescan (after plugging USB)" Q Back
   getkey
   case $KEY in

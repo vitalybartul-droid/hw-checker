@@ -33,6 +33,15 @@ c19e877582f5cf4f35e017f49c5abd40e21f3b1117413114b4544b4064948953  pool/universe/
 3042159c6d7d4dcb3df9d49cd21e49ecb57f4ba8c4153a72102f512a4fc534a2  pool/main/f/fuse3/libfuse3-3_3.14.0-5build1_amd64.deb
 2e2bf58e08848870834e31f7c38927bf8a862d875773faa8b4baa1768c09720b  pool/main/n/nvme-cli/nvme-cli_2.8-1ubuntu0.1_amd64.deb
 6cf86a02e66abf2fbdef9f97340775bbe0b58c7b687e146636cc1ed1702e4c59  pool/main/libn/libnvme/libnvme1t64_1.8-3ubuntu1_amd64.deb
+50129b90a355a0cf28ed5ed619779d8cdbbeef1b335a2ee8dddf22aed3fe3485  pool/universe/f/fbi/fbi_2.10-4ubuntu4_amd64.deb
+2640ecc16a63c5f580c3bdb1271fdb04d9fb392c573bdfef1daf22165bb14c00  pool/main/g/giflib/libgif7_5.2.2-1ubuntu1_amd64.deb
+4d6ed682972bddf62af158a06d68a0dda497e421423b7ca92fb450b3d9ceaac9  pool/main/libj/libjpeg8-empty/libjpeg8_8c-2ubuntu11_amd64.deb
+f68b5b23bc8a1688fb787d2aed7e2cdf895a73022f6a5025e183162dac4500b2  pool/main/libj/libjpeg-turbo/libjpeg-turbo8_2.1.5-2ubuntu2_amd64.deb
+e28c43bf89546ed0927b9e132d869d973c7ef07265273dc900e0f9d29afe95ce  pool/universe/c/catdoc/catdoc_0.95-5build1_amd64.deb
+3c67fad4140fee70f3f033f53495622488a777eaad3da3e05044c8cec8905900  pool/universe/d/docx2txt/docx2txt_1.4-5_all.deb
+9ea37bc2f1e43df0a98530d08e5bab1a8801bdaf0a4c81330861e788d9155bbc  pool/main/u/unzip/unzip_6.0-28ubuntu4_amd64.deb
+692ca42066872ebd683bfad422c0c800b7f5ab582ac6225a9a5cbb65f7c16003  pool/universe/o/odt2txt/odt2txt_0.5-7build1_amd64.deb
+57e837664e7d24badfcd81bfa49812d5e2f8bc5b92138d8f072a33e7f17a0816  pool/universe/x/xlsx2csv/xlsx2csv_0.7.8-1_all.deb
 "
 
 mode=${1:-get}

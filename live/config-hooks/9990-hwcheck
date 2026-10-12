@@ -28,6 +28,8 @@ for f in "$M"/*.sh; do
   tr -d '\r' < "$f" > "/usr/local/lib/hwcheck/$(basename "$f")"
 done
 chmod 755 /usr/local/lib/hwcheck/*.sh
+# previews in mc (file rescue): photos / PDF pages full screen, Word / Excel / ODF as text
+/usr/local/lib/hwcheck/mcview.sh install 2>/dev/null
 ln -sf /usr/local/lib/hwcheck/hwcheck.sh /usr/local/bin/hwcheck
 
 cat > /etc/profile.d/zz-hwcheck.sh <<'EOF'

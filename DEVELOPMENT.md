@@ -23,7 +23,7 @@ read this file first).
 | `.deb` packages in `hwcheck/debs/` (installed at boot by the hook) | `hwcheck/debs/` | see list below |
 
 Required `.deb` packages for the Repair menu and disk erase (not in the base Debian Live image):
-`mc`, `mc-data`, `chntpw`, `ntfs-3g`, `libntfs-3g89t64`, `fuse3`, `libfuse3-3`, `nvme-cli`, `libnvme1t64`.
+`mc`, `mc-data`, `chntpw`, `ntfs-3g`, `libntfs-3g89t64`, `fuse3`, `libfuse3-3`, `nvme-cli`, `libnvme1t64`, and for previews in mc: `fbi`, `libgif7`, `libjpeg8`, `libjpeg-turbo8`, `catdoc`, `docx2txt`, `unzip`, `odt2txt`, `xlsx2csv` (`poppler-utils` for PDF is in the base).
 (`hdparm`, `wipefs`, `blkdiscard`, `sfdisk`, `rtcwake` used by disk erase are already in the base image.)
 (`memtester` is already in the base image, so it is not shipped in `debs/`.)
 ntfs-3g is used read-write; read-only mounts use the kernel `ntfs3` driver, which needs no package.
