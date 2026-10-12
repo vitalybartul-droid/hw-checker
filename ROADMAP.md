@@ -64,6 +64,9 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
 - **v1.4** — surface scan: SMART / kernel-log polling runs in the background, so a slow `smartctl`
   never pauses the scan; NVMe "timeout, completion polled" (lost interrupt, Linux power-saving quirk,
   disk answered) shown in yellow as harmless and kept out of the error count.
+  **Disk erase** (`D` → `E`): quick (wipefs + TRIM), secure (NVMe format with crypto/user-data
+  erase, ATA Secure Erase with automatic unfreeze by sleep), overwrite with zeros; `Y` + last 4
+  characters of the serial; before/after check of 64 points; optional empty GPT; result in the report.
 
 ## Priority 1
 
@@ -97,8 +100,6 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   to catch overheating and throttling (dirty cooler, dry thermal paste).
   Also show the **CPU temperature in the status line of every long test** (RAM, disk scans), and
   flag "CPU hot at idle" / "throttling under load" in the summary.
-- **Secure disk wipe before resale** — NVMe format / ATA Secure Erase / `nwipe` for HDD,
-  with double confirmation.
 - **Save reports to the stick** — per-machine report file + one `intake.csv` table.
 - **Send report to Odoo** — JSON to an Odoo endpoint when the network is available.
 - **BIOS admin password detection** — via `firmware-attributes` (HP / Dell / Lenovo drivers).

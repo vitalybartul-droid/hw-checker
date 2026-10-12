@@ -1,8 +1,10 @@
 #!/bin/bash
-# disks.sh — disk check for intake and repair (key D). Everything is READ-ONLY.
+# disks.sh — disk check for intake and repair (key D). All checks are READ-ONLY;
+# the only destructive action is E = erase (erase.sh: asks for Y + the serial number).
 #   Enter = quick check: SMART + read speed + surface scan at ~300 points (about a minute)
 #   F     = full surface scan, Victoria-style latency map of the whole disk
 #   T     = SMART short self-test (the drive tests itself, ~2 min)
+#   E     = ERASE the disk (quick / secure / overwrite) - see erase.sh
 # Result lines are appended to the report (/tmp/hwcheck.txt).
 export LC_ALL=C
 [ "$(id -u)" = 0 ] || exec sudo bash "$0" "$@"
@@ -267,13 +269,15 @@ while true; do
   t=$(temp_now "$dev")
   echo "  SMART  : $(smart_line "$dev")${t:+   temp ${t}C}${SMARTD:+   (via USB bridge: $SMARTD)}"
   [ -n "$RPM" ] && echo "  Spindle: $RPM"
-  echo "  Every check here is READ-ONLY. Nothing is written to the disk."
-  keybar Enter "Quick check (~1 min)" F "Full surface scan" T "SMART self-test (~2 min)" Q Back
+  echo "  Checks are READ-ONLY. Only E (erase) writes, and it asks twice."
+  keybar Enter "Quick check (~1 min)" F "Full surface scan" T "SMART self-test (~2 min)" E "Erase disk" Q Back
   getkey
   case $KEY in
     "") scan quick; pause ;;
     f)  scan full;  pause ;;
     t)  selftest;   pause ;;
+    e)  bash "$(dirname "$(readlink -f "$0")")/erase.sh" "$dev"
+        sz=$(blockdev --getsize64 "$dev" 2>/dev/null || echo "$sz") ;;
     q)  break ;;
   esac
 done
