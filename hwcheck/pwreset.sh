@@ -29,7 +29,17 @@ done < <(lsblk -pnro NAME,FSTYPE 2>/dev/null)
 echo "  Windows system drive: $windev"
 # remove_hiberfile discards a saved Windows session (safe); recover replays the NTFS journal.
 # We never use ntfs3 "force", which can corrupt a dirty filesystem.
+echo "  If Windows was hibernated / Fast Startup, its saved session will be discarded"
+echo "  (files are not touched; the next start is a normal full boot)."
+keybar Y "Continue" Q Cancel
+getkey; [ "$KEY" = y ] || exit 0
 ntfs-3g -o remove_hiberfile,recover "$windev" "$MNT" 2>/dev/null || { echo "  Cannot mount read-write."; echo "  The drive may be BitLocker-encrypted, or NTFS is damaged. Run chkdsk in Windows, then retry."; pause; exit 1; }
+# ntfs-3g can silently fall back to read-only: check before chntpw tries to write
+if ! touch "$MNT/.hwrw$$" 2>/dev/null; then
+  umount "$MNT" 2>/dev/null
+  echo "  The drive opened READ-ONLY (NTFS in an unsafe state). Run chkdsk in Windows, then retry."; pause; exit 1
+fi
+rm -f "$MNT/.hwrw$$"
 cfg="$MNT/Windows/System32/config"
 # chntpw -l lists accounts as:  | 03e9 | user name | ADMIN | dis/lock |
 mapfile -t ACC < <(chntpw -l "$cfg/SAM" 2>/dev/null | awk -F'|' '$2 ~ /^ *[0-9a-fA-F]+ *$/ {
