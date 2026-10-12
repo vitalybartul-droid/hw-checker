@@ -28,6 +28,8 @@ Required `.deb` packages for the Repair menu (not in the base Debian Live image)
 ntfs-3g is used read-write; read-only mounts use the kernel `ntfs3` driver, which needs no package.
 Do not download these by hand — run `tools/get-debs.sh`, which fetches the exact pinned versions
 from the Ubuntu pool and checks each `sha256`. The pinned list lives at the top of that script.
+Any other `.deb` in `hwcheck/debs/` is moved to `hwcheck/debs/unused/`: the build and the boot hook
+take every `debs/*.deb`, so two versions of one package must never sit there together.
 | Built ISOs | not kept locally | GitHub Releases |
 
 ## Test on a stick (fast loop, no ISO build)

@@ -8,6 +8,10 @@
 #   tools/get-debs.sh            # download + verify into hwcheck/debs/
 #   tools/get-debs.sh --check    # only verify what is already there
 #
+# Any other .deb found in hwcheck/debs/ (e.g. an older hand-downloaded version) is moved to
+# hwcheck/debs/unused/. Both build-iso.sh and the boot hook take EVERY hwcheck/debs/*.deb, so two
+# versions of one package would overwrite each other's files at boot. --check reports them.
+#
 # Source: the Ubuntu 24.04 (noble) pool. Ubuntu is used because its archive is reliably
 # reachable; the binaries are built against an OLDER glibc than Debian 13 ships, so they run
 # on the Debian Live base (forward-compatible). Every file is pinned to an exact version and
@@ -42,13 +46,27 @@ while read -r sha path; do
   fi
   if [ "$mode" = --check ]; then echo "MISSING/BAD  $(basename "$f")"; fail=1; continue; fi
   echo "fetching     $(basename "$f")"
-  curl -fSL --retry 3 -o "$f.part" "$BASE/$path"
+  curl -fsSL --retry 3 -o "$f.part" "$BASE/$path"
   if echo "$sha  $f.part" | sha256sum -c --status -; then
     mv -f "$f.part" "$f"; echo "ok           $(basename "$f")"
   else
     rm -f "$f.part"; echo "SHA256 MISMATCH  $(basename "$f")"; fail=1
   fi
 done <<< "$PKGS"
+
+# .deb files that are not in the pinned list must not end up in the ISO
+pinned=$(echo "$PKGS" | awk 'NF{n=split($2,a,"/"); print a[n]}')
+for f in "$DEST"/*.deb; do
+  [ -e "$f" ] || continue
+  b=$(basename "$f")
+  echo "$pinned" | grep -qxF "$b" && continue
+  if [ "$mode" = --check ]; then
+    echo "EXTRA        $b  (not pinned; would be shipped too - run without --check to move it aside)"; fail=1
+  else
+    mkdir -p "$DEST/unused"; mv -f "$f" "$DEST/unused/"
+    echo "moved aside  $b  -> hwcheck/debs/unused/ (not pinned, not shipped)"
+  fi
+done
 
 echo
 if [ "$fail" = 0 ]; then
