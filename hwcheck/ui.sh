@@ -26,14 +26,30 @@ keybar() {
 }
 
 # getkey -> KEY: one keypress, lower-cased. Enter = "", Esc = "q".
-# Arrow/function keys (Esc + sequence) become "?" so they never act as "back".
+# Arrow / page keys arrive as Esc + a sequence: they become "up", "down", "pgup", "pgdn"
+# (other function keys "?"), so their letters ([A [B [C [D) never act as keys of their own.
 getkey() {
   KEY=""
   IFS= read -rsn1 KEY || { KEY=q; return; }
   if [ "$KEY" = $'\e' ]; then
-    local rest=""
-    IFS= read -rsn5 -t 0.05 rest
-    if [ -n "$rest" ]; then KEY="?"; else KEY=q; fi
+    local rest="" c
+    # read the sequence one char at a time up to its final letter/~, so two quick arrow presses
+    # are never merged into one
+    if IFS= read -rsn1 -t 0.05 c; then
+      rest=$c
+      if [ "$c" = "[" ] || [ "$c" = "O" ]; then
+        while IFS= read -rsn1 -t 0.05 c; do rest+=$c; [[ $c == [A-Za-z~] ]] && break; done
+      fi
+    fi
+    case $rest in
+      "")          KEY=q ;;
+      "[A"|"OA")   KEY=up ;;
+      "[B"|"OB")   KEY=down ;;
+      "[5~")       KEY=pgup ;;
+      "[6~")       KEY=pgdn ;;
+      *)           KEY="?" ;;
+    esac
+    return
   fi
   KEY=${KEY,,}
 }

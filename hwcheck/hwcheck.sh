@@ -655,7 +655,7 @@ summary() {
   v=$(sed -n 's/^Keyboard test:.*not pressed:\(.*\)/\1/p' "$f" | tail -1); [ -n "$v" ] && warns+=("keys not pressed:$v")
   v=$(sed -n 's/^Screen test: //p' "$f" | tail -1); [ -n "$v" ] && [ "$v" != "no defects noted" ] && issues+=("screen: $v")
 
-  printf '\n\e[1;36m================ SUMMARY ================\e[0m\n'
+  printf '\n\e[1;36m================ SUMMARY ================\e[0m   \e[1;37;44m ViCheck %s \e[0m\n' "${APPVER:-dev}"
   printf '  \e[1m%s\e[0m   s/n %s\n' "$model" "$serial"
   printf '  %s | %s RAM (%s) | %s\n' "$cpu" "$ram" "${slots:-slots ?}" "${disks:-no disk}"
   printf '  %s%s%s | battery %s | Windows key: %s\n' "${disp:-no panel}" "${hz:+ ${hz}Hz}" "${gpu:+ | $gpu}" "$( [ -n "$bh" ] && echo "${bh}%" || echo none )" "$key"
@@ -693,11 +693,13 @@ while true; do
   # (e.g. +/- at the largest/smallest size) must not stack another menu line
   [ $redraw = 1 ] && menu
   redraw=1
-  IFS= read -rsn1 k                              # one key, no Enter needed
+  # one key, no Enter needed. getkey (ui.sh) swallows the whole Esc sequence of an arrow key:
+  # read -n1 used to take "Esc [ B" as three keys, so Down acted like B (colours), Right like C...
+  getkey; k=$KEY
   case $k in
     "")   # second Enter required: one stray key must not wipe the report (it lives only in RAM)
           printf '\n  \e[1;33mPower off? Press Enter again to confirm, any other key to cancel.\e[0m '
-          IFS= read -rsn1 k2; echo
+          IFS= read -rsn1 k2; IFS= read -rsn10 -t 0.05 _; echo   # drop the rest of an arrow key
           if [ -z "$k2" ]; then printf '\n  Powering off...\n'; poweroff; exit; fi
           show ;;
     k|K)  bash "$T/kbdtest.sh"
@@ -708,7 +710,7 @@ while true; do
     v|V)  bash "$T/screentest.sh"; show ;;
     d|D)  bash "$T/disks.sh"; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
-    l|L)  colorize "$OUT" | less -R -Q -P'  Up/Down = line   Space or Fn+Down = page down   Fn+Up = page up   q = back to the report '; show ;;
+    up|down|pgup|pgdn|l|L)  colorize "$OUT" | less -R -Q -P'  Up/Down = line   Space or Fn+Down = page down   Fn+Up = page up   q = back to the report '; show ;;
     +|=)  if [ ${#SIZES[@]} -gt 1 ] && [ "$FIDX" -lt $(( ${#SIZES[@]} - 1 )) ]; then
             FIDX=$((FIDX+1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the largest size
