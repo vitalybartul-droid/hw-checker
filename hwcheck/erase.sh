@@ -99,12 +99,16 @@ m_nvme() {
   fna=$(nvme id-ctrl "$ctrl" 2>/dev/null | awk '$1=="fna"{print $3}')
   if [ -n "$oacs" ] && [ $(( oacs & 0x2 )) -eq 0 ]; then echo "  This NVMe does not support the Format command."; return 1; fi
   if [ -n "$fna" ] && [ $(( fna & 0x4 )) -ne 0 ]; then ses=2; what="cryptographic erase"; fi
+  # keep the current LBA format (sector size): flbas bits 0-3 + bits 5-6 (formats above 16)
+  local flbas lbaf=0
+  flbas=$(nvme id-ns "$dev" 2>/dev/null | awk '$1=="flbas"{print $3}')
+  [ -n "$flbas" ] && lbaf=$(( (flbas & 0xF) | (((flbas >> 5) & 0x3) << 4) ))
   echo "  NVMe Format, $what (the drive does it internally)."
-  run_wait "a few seconds to a minute" nvme format "$dev" --ses=$ses --force
+  run_wait "a few seconds to a minute" nvme format "$dev" --lbaf=$lbaf --ses=$ses --force
   local rc=$?
   if [ $rc -ne 0 ] && [ $ses = 2 ]; then          # some drives advertise crypto erase but reject it
     echo "  Cryptographic erase refused, trying user-data erase..."; ses=1; what="user-data erase"
-    run_wait "a few seconds to a minute" nvme format "$dev" --ses=1 --force; rc=$?
+    run_wait "a few seconds to a minute" nvme format "$dev" --lbaf=$lbaf --ses=1 --force; rc=$?
   fi
   [ $rc -ne 0 ] && { echo "  Failed:"; tail -3 /tmp/erase.out | sed 's/^/    /'; return 1; }
   reread; METHOD="NVMe secure format ($what)"
