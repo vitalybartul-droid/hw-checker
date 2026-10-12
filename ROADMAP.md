@@ -64,6 +64,8 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
 - **v1.4** — surface scan: SMART / kernel-log polling runs in the background, so a slow `smartctl`
   never pauses the scan; NVMe "timeout, completion polled" (lost interrupt, Linux power-saving quirk,
   disk answered) shown in yellow as harmless and kept out of the error count.
+
+- **v2.0 — ViCheck** (renamed from hw-checker; feature freeze: from here on, fixes from real use).
   **Disk erase** (`D` → `E`): quick (wipefs + TRIM), secure (NVMe format with crypto/user-data
   erase, ATA Secure Erase with automatic unfreeze by sleep), overwrite with zeros; `Y` + last 4
   characters of the serial; before/after check of 64 points; optional empty GPT; result in the report.
@@ -72,6 +74,10 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   **HDD seek test** (`D` → `S`), **HPA/DCO** hidden-capacity line, key colour schemes (`B`).
   **Remap** (`D` → `M`, HDD): rewrite only unreadable sectors; extended SMART self-test (`T` → `L`);
   eject USB disk (`X`); Refresh stops if the disk drops off; seek verdict warns about SMART bad sectors.
+  **Previews in file rescue (mc)**: photos and PDF pages full screen (`fbi`), Word / Excel / ODF / text
+  files as text; Cyrillic and Latvian file names (UTF-8 + Terminus font); disks mounted without exec
+  bits (Enter never runs a file). HDD scan thresholds follow the position on the platter.
+  Boot fix: extra packages unpacked with `tar --keep-directory-symlink`.
 
 ## Priority 1
 
@@ -106,4 +112,8 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
 
 ## Maybe
 
+New ideas go here first. Rule: a feature is built only after it was really needed at work twice.
+
 - File recovery — `testdisk` / `photorec`.
+- Small screens (1366x768): smaller Terminus steps / compact report so it fits without scrolling.
+- Photo viewer with configurable keys (`fim`) if `j`/`k`/Space are not enough.

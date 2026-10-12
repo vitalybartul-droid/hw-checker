@@ -1,4 +1,4 @@
-Флешка приёмки б/у ПК — Debian Live + hwcheck (проверено на Debian Live 13.7.0, HP EliteBook 850 G7)
+ViCheck — флешка приёмки и ремонта б/у ПК — Debian Live + hwcheck (проверено на Debian Live 13.7.0, HP EliteBook 850 G7)
 
 1. Скачать debian-live-13.x.x-amd64-standard.iso
    (cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/, вариант standard, НЕ gnome).
@@ -30,7 +30,7 @@ L = листать отчёт, R = ремонт (F = спасение файло
 ==================================================================
 Готовый образ (для коллег): tools/build-iso.sh
   tools/build-iso.sh debian-live-13.7.0-amd64-standard.iso
-  -> hwcheck-<версия>-debian-13.7.0.iso
+  -> vicheck-<версия>-debian-13.7.0.iso
 Внутри уже есть скрипты, хук и правленое меню загрузки. Записывать Rufus
 (ISO или DD) или dd — больше ничего копировать и править не нужно.
 Secure Boot работает (загрузчик Debian не меняется).

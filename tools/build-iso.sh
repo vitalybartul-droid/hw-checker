@@ -1,5 +1,5 @@
 #!/bin/bash
-# build-iso.sh — make a ready-to-write hwcheck ISO from the official Debian Live "standard" ISO.
+# build-iso.sh — make a ready-to-write ViCheck ISO from the official Debian Live "standard" ISO.
 #
 # Usage:  tools/build-iso.sh debian-live-13.x.x-amd64-standard.iso [output.iso]
 #
@@ -20,7 +20,7 @@ SRC=${1:?usage: $0 debian-live-...-standard.iso [output.iso]}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 VER=${HWCHECK_VERSION:-$(git -C "$REPO" describe --tags --always --dirty 2>/dev/null || date +%Y%m%d)}
 DEB=$(basename "$SRC" | sed -nE 's/debian-live-([0-9.]+)-.*/\1/p')
-OUT=${2:-hwcheck-${VER}-debian-${DEB:-live}.iso}
+OUT=${2:-vicheck-${VER}-debian-${DEB:-live}.iso}
 X=${XORRISO:-xorriso}
 HOOK="hooks=file:///run/live/medium/live/config-hooks/9990-hwcheck"
 EXTRA="memtest=1 $HOOK"
@@ -70,7 +70,7 @@ grep -qx vmlinuz "$W/live" && grep -qx initrd.img "$W/live" || { echo "ERROR: /l
 for f in "$REPO"/hwcheck/*.sh; do tr -d '\r' < "$f" > "$I/hwcheck/$(basename "$f")"; done
 ls "$REPO"/hwcheck/debs/*.deb >/dev/null 2>&1 && { mkdir -p "$I/hwcheck/debs"; cp "$REPO"/hwcheck/debs/*.deb "$I/hwcheck/debs/"; }
 tr -d '\r' < "$REPO/live/config-hooks/9990-hwcheck" > "$I/live/config-hooks/9990-hwcheck"
-echo "hwcheck $VER built $(date -u +%Y-%m-%dT%H:%MZ) from $(basename "$SRC")" > "$I/hwcheck/VERSION"
+echo "ViCheck $VER built $(date -u +%Y-%m-%dT%H:%MZ) from $(basename "$SRC")" > "$I/hwcheck/VERSION"
 chmod 755 "$I"/hwcheck/*.sh "$I/live/config-hooks/9990-hwcheck"
 
 # --- what to remove: installer, its packages, versioned kernel copies ---

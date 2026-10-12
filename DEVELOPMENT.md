@@ -1,6 +1,6 @@
 # Development notes
 
-Practical notes for working on hw-checker from any computer (and for AI-assisted sessions:
+Practical notes for working on ViCheck (formerly hw-checker) from any computer (and for AI-assisted sessions:
 read this file first).
 
 ## Sync between computers
@@ -35,7 +35,7 @@ take every `debs/*.deb`, so two versions of one package must never sit there tog
 
 ## Test on a stick (fast loop, no ISO build)
 
-1. Write any built hwcheck ISO (or the plain Debian ISO, see `README.ru.txt`) with Rufus
+1. Write any built ViCheck ISO (or the plain Debian ISO, see `README.ru.txt`) with Rufus
    in **ISO mode** — the stick stays writable (FAT32).
 2. Copy the changed `hwcheck/*.sh` to `hwcheck/` on the stick, boot a laptop, check.
 3. Keyboard stuck after a test: `Alt+SysRq+R`, or power button.
@@ -44,7 +44,7 @@ take every `debs/*.deb`, so two versions of one package must never sit there tog
 
 ```bash
 tools/build-iso.sh ../_images/debian-live-13.7.0-amd64-standard.iso
-# -> hwcheck-<git describe>-debian-13.7.0.iso
+# -> vicheck-<git describe>-debian-13.7.0.iso
 ```
 
 - Needs `xorriso`. If it is not installed and there is no root (e.g. a sandboxed VM),

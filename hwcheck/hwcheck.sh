@@ -667,7 +667,13 @@ summary() {
   fi
 }
 
-show() { clear; colorize "$OUT"; summary; }
+# Program name + version on top of the report (VERSION is written by tools/build-iso.sh)
+APPVER=$(awk '{print $2; exit}' /run/live/medium/hwcheck/VERSION 2>/dev/null)
+show() {
+  clear
+  printf '  \e[1;37;44m ViCheck %s \e[0m  \e[1mPC hardware check & rescue\e[0m\n' "${APPVER:-dev}"
+  colorize "$OUT"; summary
+}
 . "$(dirname "$(readlink -f "$0")")/ui.sh"
 menu() {
   local a=("Enter x2" "Power off" K Keyboard C Charger V Screen D Disks M RAM L Scroll R Repair B Colours)

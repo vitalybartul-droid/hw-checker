@@ -1,4 +1,6 @@
-# hw-checker
+# ViCheck
+
+**PC hardware check & rescue USB** (formerly *hw-checker*).
 
 A bootable USB stick for fast intake checks of used laptops and PCs.
 Plug it in, pick the USB drive in the boot menu, and about a minute later the
