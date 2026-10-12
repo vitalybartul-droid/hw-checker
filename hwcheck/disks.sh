@@ -71,7 +71,7 @@ kern_polled() {
 # status lines. If there are more blocks than cells, one cell covers several blocks and takes
 # the colour of the WORST of them, so no slow or bad spot is hidden.
 scan() {
-  local CHUNK=32 total step niters START i=0 b=0 ms t t0 t1 el pct eta d k alerts lv kp=0 tt qalerts="" bgpid="" BGF=/tmp/.scanbg.$$
+  local CHUNK=32 total step niters START i=0 b=0 ms t t0 t1 el pct eta d k alerts lv zf zms kp=0 tt qalerts="" bgpid="" BGF=/tmp/.scanbg.$$
   local good=0 ok=0 slow=0 vslow=0 bad=0 worst=0 readms=0 badlist="" maxt sm_before sm_after chg
   total=$(( sz / (CHUNK*1024*1024) )); [ $total -lt 1 ] && total=1
   step=1; [ "$1" = quick ] && { step=$(( total/300 )); [ $step -lt 1 ] && step=1; }
@@ -102,6 +102,7 @@ scan() {
   [ -n "$prebad" ] && printf '  \e[1;31m!! The disk already reports bad sectors:%s - expect slow or unreadable spots\e[0m\n' "$prebad"
   printf '  %s scale:  %s fast (>%s MB/s)  %s ok (%s-%s)  %s slow (%s-%s)  %s very slow (<%s)  %s unreadable\n' \
     "$CLASS" "$C_FAST" $MB1 "$C_OK" $MB2 $MB1 "$C_SLOW" $MB3 $MB2 "$C_VSLOW" $MB3 "$C_BAD"
+  [ "$ROT" = 1 ] && echo "  (HDD: speeds for the start of the disk; the end is normally half as fast and is judged accordingly)"
   printf '  Whole disk on one screen: each cell = %s, coloured by its worst block.   \e[1mCtrl+C = stop\e[0m\n' "$cellsz"
 
   local ci=0 cn=0 cw=0 r
@@ -132,9 +133,13 @@ scan() {
     if dd if="$dev" of=/dev/null bs=1M count=$CHUNK skip=$(( b*CHUNK )) $DIRECT status=none 2>/dev/null; then
       t1=$(date +%s%N); ms=$(( (t1-t0)/1000000 )); readms=$(( readms + ms )); winms=$(( winms + ms )); winn=$(( winn + 1 ))
       [ $ms -gt $worst ] && worst=$ms
-      if   [ $ms -lt $T1 ]; then lv=0; good=$((good+1))
-      elif [ $ms -lt $T2 ]; then lv=1; ok=$((ok+1))
-      elif [ $ms -lt $T3 ]; then lv=2; slow=$((slow+1))
+      # HDD: the inner end of the platters is read about twice as slowly as the outer start, by design
+      # (fewer sectors per turn). Scale the thresholds with the position so a normal disk stays green.
+      zf=1000; [ "$ROT" = 1 ] && zf=$(( 1000 + 1000 * b / total ))
+      zms=$(( ms * 1000 / zf ))
+      if   [ $zms -lt $T1 ]; then lv=0; good=$((good+1))
+      elif [ $zms -lt $T2 ]; then lv=1; ok=$((ok+1))
+      elif [ $zms -lt $T3 ]; then lv=2; slow=$((slow+1))
       else                       lv=3; vslow=$((vslow+1)); fi
       echo "$b $ms $lv" >> "$SLOWF.tmp"          # every block's read time, for Refresh (R)
     else
@@ -235,6 +240,9 @@ scan() {
     verdict="slow zones while hot (${maxt}C) - likely thermal throttling, not damage"
   elif [ $(( nslow * 100 / (i>0?i:1) )) -lt 3 ]; then
     verdict="surface OK"; [ $nslow -gt 0 ] && verdict="surface OK (a few slow blocks - normal background work)"
+  elif [ "$ROT" = 1 ] && [ "$1" = quick ]; then
+    # the quick scan reads one block per cell: a single hiccup paints a whole cell, so do not judge yet
+    verdict="some slow reads in the quick sample - run F (full scan): slow in the same places = weak sectors"
   elif [ "$ROT" = 1 ]; then
     verdict="slow sectors, no errors yet - HDD starting to wear"
   else

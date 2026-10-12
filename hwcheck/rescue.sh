@@ -121,6 +121,23 @@ make_writable(){
   sleep 2
 }
 
+# mc must show customers' file names (Russian, Latvian ...): run it in UTF-8 and with a console font
+# that has Cyrillic and Latin with diacritics (Uni2-TerminusBold: ā š ž ļ ... and а-я), same height
+# as the current font so the layout does not jump. The rest of the program stays plain English.
+utf8_font() {
+  local t=/tmp/.curfont fh=16 f best="" bd=999 h d
+  command -v setfont >/dev/null || return
+  if setfont -O "$t" 2>/dev/null; then
+    if [ "$(od -An -tx1 -N4 "$t" | tr -d ' \n')" = 72b54a86 ]; then fh=$(od -An -tu4 -j24 -N4 "$t" | tr -d ' \n')
+    else fh=$(od -An -tu1 -j3 -N1 "$t" | tr -d ' \n'); fi
+  fi
+  for f in /usr/share/consolefonts/Uni2-TerminusBold[0-9]*.psf.gz; do
+    h=$(basename "$f" .psf.gz); h=${h#Uni2-TerminusBold}; h=${h%%x*}
+    [[ $h =~ ^[0-9]+$ ]] || continue
+    d=$(( h > fh ? h - fh : fh - h )); [ $d -lt $bd ] && { bd=$d; best=$f; }
+  done
+  [ -n "$best" ] && setfont "$best" 2>/dev/null
+}
 TBL=/tmp/rescue.tbl; need=1
 while true; do
   clear; title "FILE RESCUE"
@@ -134,7 +151,7 @@ while true; do
   keybar Enter "Open mc" W "Make a disk writable" U "Rescan (after plugging USB)" Q Back
   getkey
   case $KEY in
-    ""|o) mc "$(best_src)" "${TGT[0]:-$MNT}" ;;
+    ""|o) utf8_font; LANG=C.UTF-8 LC_ALL=C.UTF-8 mc "$(best_src)" "${TGT[0]:-$MNT}" ;;
     w)    make_writable ;;
     u)    need=1 ;;
     q)    break ;;
