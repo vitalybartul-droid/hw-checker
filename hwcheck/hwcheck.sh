@@ -220,26 +220,55 @@ src=$(findmnt -no SOURCE /run/live/medium 2>/dev/null)
 dmesg -n 1 2>/dev/null
 
 # ---- Console font size: auto-scale on HiDPI panels, adjustable with +/- in the menu ----
+# SIZES = the steps +/- walk through, smallest first. "orig" is the font the console booted with
+# (the kernel picks a big one on some HiDPI panels), placed by its real height, so the steps are
+# always in order. A Terminus size as tall as "orig" is skipped: it would be a step that changes
+# nothing. Only names with a real size are taken - Uni2-TerminusBoldVGA14/16 have none.
 FONTDIR=/usr/share/consolefonts
-FONTS=()   # available Terminus Bold sizes, smallest first (e.g. 16 20x10 22x11 24x11 28x14 32x16)
-mapfile -t FONTS < <(ls "$FONTDIR"/Uni2-TerminusBold*.psf.gz 2>/dev/null | sed -E 's/.*TerminusBold([0-9x]+)\.psf\.gz/\1/' | sort -t x -k1,1n)
-fh() { echo "${1%%x*}"; }                       # font height from "28x14"
-setfont_idx() {                                 # $1 = index in FONTS, -1 = system default
-  if [ "$1" -lt 0 ]; then
-    if [ -s /tmp/.hwcheck_origfont ]; then setfont /tmp/.hwcheck_origfont 2>/dev/null; else setfont 2>/dev/null; fi
-  else setfont "$FONTDIR/Uni2-TerminusBold${FONTS[$1]}.psf.gz" 2>/dev/null; fi
+ORIGF=/tmp/.hwcheck_origfont
+SIZES=(); FIDX=0
+fh() { echo "${1%%x*}"; }                       # font height from "28x14" or "16"
+psf_height() {                                  # height of a PSF1/PSF2 font file, 0 = unknown
+  local b; b=$(od -An -tu1 -N28 "$1" 2>/dev/null | tr -s ' \n' ' ')
+  # shellcheck disable=SC2086
+  set -- $b
+  if [ "$1" = 54 ] && [ "$2" = 4 ]; then echo "${4:-0}"                     # PSF1: byte 3
+  elif [ "$1" = 114 ] && [ "$2" = 181 ] && [ "$3" = 74 ] && [ "$4" = 134 ] && [ $# -ge 28 ]; then
+    shift 24; echo $(( $1 | $2<<8 | $3<<16 | $4<<24 ))                     # PSF2: offset 24
+  else echo 0; fi
+}
+setfont_idx() {                                 # $1 = index in SIZES
+  if [ "${SIZES[$1]}" = orig ]; then
+    if [ -s "$ORIGF" ]; then setfont "$ORIGF" 2>/dev/null; else setfont 2>/dev/null; fi
+  else setfont "$FONTDIR/Uni2-TerminusBold${SIZES[$1]}.psf.gz" 2>/dev/null; fi
   echo "$1" > /tmp/.hwcheck_font
 }
-FIDX=-1
-if [ -t 1 ] && command -v setfont >/dev/null && [ ${#FONTS[@]} -gt 0 ]; then
-  [ -e /tmp/.hwcheck_origfont ] || setfont -O /tmp/.hwcheck_origfont 2>/dev/null   # remember the original font
-  if [ -r /tmp/.hwcheck_font ]; then
-    FIDX=$(cat /tmp/.hwcheck_font)              # keep the size chosen earlier in this session
+if [ -t 1 ] && command -v setfont >/dev/null; then
+  [ -e "$ORIGF" ] || setfont -O "$ORIGF" 2>/dev/null           # remember the original font
+  oh=$(psf_height "$ORIGF"); [ "${oh:-0}" -gt 0 ] 2>/dev/null || oh=16   # unknown: assume 8x16
+  mapfile -t TSIZES < <(ls "$FONTDIR"/Uni2-TerminusBold*.psf.gz 2>/dev/null \
+                        | sed -nE 's|.*/Uni2-TerminusBold([0-9]+(x[0-9]+)?)\.psf\.gz$|\1|p' | sort -t x -k1,1n)
+  placed=0
+  for sz in "${TSIZES[@]}"; do
+    [ "$(fh "$sz")" -eq "$oh" ] && continue
+    if [ $placed = 0 ] && [ "$(fh "$sz")" -gt "$oh" ]; then SIZES+=(orig); placed=1; fi
+    SIZES+=("$sz")
+  done
+  [ $placed = 0 ] && SIZES+=(orig)
+  for i in "${!SIZES[@]}"; do [ "${SIZES[$i]}" = orig ] && OIDX=$i; done
+  saved=$(cat /tmp/.hwcheck_font 2>/dev/null)
+  if [[ $saved =~ ^[0-9]+$ ]] && [ "$saved" -lt ${#SIZES[@]} ]; then
+    FIDX=$saved                                 # keep the size chosen earlier in this session
   else
+    FIDX=$OIDX
     scr_h=$(cut -d, -f2 /sys/class/graphics/fb0/virtual_size 2>/dev/null)
     want=$(( ${scr_h:-1080} / 60 ))             # aim for ~60 text rows on screen
-    for i in "${!FONTS[@]}"; do [ "$(fh "${FONTS[$i]}")" -le "$want" ] && FIDX=$i; done
-    [ "$want" -le 18 ] && FIDX=-1               # normal screens: leave the default font
+    if [ "$want" -gt 18 ] && [ "$want" -gt "$oh" ]; then   # HiDPI and the boot font is too small
+      for i in "${!SIZES[@]}"; do
+        sz=${SIZES[$i]}; [ "$sz" = orig ] && continue
+        [ "$(fh "$sz")" -le "$want" ] && [ "$(fh "$sz")" -gt "$oh" ] && FIDX=$i   # only ever bigger
+      done
+    fi
   fi
   setfont_idx "$FIDX"
 fi
@@ -633,7 +662,7 @@ show() { clear; colorize "$OUT"; summary; }
 . "$(dirname "$(readlink -f "$0")")/ui.sh"
 menu() {
   local a=("Enter x2" "Power off" K Keyboard C Charger V Screen D Disks M RAM L Scroll R Repair)
-  [ ${#FONTS[@]} -gt 0 ] && a+=("+/-" "Text size")
+  [ ${#SIZES[@]} -gt 1 ] && a+=("+/-" "Text size")
   keybar "${a[@]}"
 }
 
@@ -665,10 +694,10 @@ while true; do
     d|D)  bash "$T/disks.sh"; show ;;
     m|M)  bash "$T/ramtest.sh"; show ;;
     l|L)  colorize "$OUT" | less -R -Q -P'  Up/Down PgUp/PgDn = scroll     q = back to the report '; show ;;
-    +|=)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -lt $(( ${#FONTS[@]} - 1 )) ]; then
+    +|=)  if [ ${#SIZES[@]} -gt 1 ] && [ "$FIDX" -lt $(( ${#SIZES[@]} - 1 )) ]; then
             FIDX=$((FIDX+1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the largest size
-    -|_)  if [ ${#FONTS[@]} -gt 0 ] && [ "$FIDX" -gt -1 ]; then
+    -|_)  if [ ${#SIZES[@]} -gt 1 ] && [ "$FIDX" -gt 0 ]; then
             FIDX=$((FIDX-1)); setfont_idx "$FIDX"; show
           else redraw=0; fi ;;                   # already the smallest size
     r|R)  bash "$T/repair.sh"; show ;;

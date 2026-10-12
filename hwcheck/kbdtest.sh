@@ -80,7 +80,8 @@ NEED_ROWS=$(( TOP + 13 + 5 ))                    # layout + status lines
 if [ -t 1 ] && command -v setfont >/dev/null && [ -r /sys/class/graphics/fb0/virtual_size ]; then
   IFS=, read -r scr_w scr_h < /sys/class/graphics/fb0/virtual_size
   best=""; best_np=""
-  for f in $(ls "$FONTDIR"/Uni2-TerminusBold*.psf.gz 2>/dev/null | sed -E 's/.*TerminusBold([0-9x]+)\.psf\.gz/\1/' | sort -t x -k1,1n); do
+  # only names with a real size: Uni2-TerminusBoldVGA14/16 would break the arithmetic below
+  for f in $(ls "$FONTDIR"/Uni2-TerminusBold*.psf.gz 2>/dev/null | sed -nE 's|.*/Uni2-TerminusBold([0-9]+(x[0-9]+)?)\.psf\.gz$|\1|p' | sort -t x -k1,1n); do
     fh=${f%%x*}; case $f in *x*) fw=${f#*x} ;; *) fw=8 ;; esac   # "16" = 8x16, "28x14" = 14 wide
     [ $(( scr_h / fh )) -ge $NEED_ROWS ] || continue
     [ $(( scr_w / fw )) -ge $(( maxx + 30 )) ] && best_np=$f         # fits with the numpad
