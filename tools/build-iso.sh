@@ -23,7 +23,8 @@ DEB=$(basename "$SRC" | sed -nE 's/debian-live-([0-9.]+)-.*/\1/p')
 OUT=${2:-vicheck-${VER}-debian-${DEB:-live}.iso}
 X=${XORRISO:-xorriso}
 HOOK="hooks=file:///run/live/medium/live/config-hooks/9990-hwcheck"
-EXTRA="memtest=1 $HOOK"
+# loglevel=3: hide harmless firmware warnings (SGX off, ACPI quirks) on screen at boot; dmesg keeps them
+EXTRA="memtest=1 loglevel=3 $HOOK"
 
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 I=$W/iso            # files to put into the ISO, laid out by their path in the ISO
