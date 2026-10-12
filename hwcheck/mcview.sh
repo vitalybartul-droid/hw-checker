@@ -1,7 +1,8 @@
 #!/bin/bash
 # mcview.sh — previews in mc (file rescue) on the text console, no graphics desktop needed.
 #   mcview.sh install      add our handlers to the top of /etc/mc/mc.ext.ini (boot hook, once)
-#   mcview.sh open FILE    photo: full screen with fbi (all photos of the folder; PgDn/Space next,
+#   mcview.sh open FILE    (keys are listed on the file rescue screen)
+#                          photo: full screen with fbi (all photos of the folder; PgDn/Space next,
 #                          PgUp back, q = return to mc);  PDF: pages as pictures (first 20)
 #   mcview.sh view FILE    text of PDF / Word / Excel / OpenOffice / PowerPoint for mc's viewer
 # mc passes the file as %f; it also sets MC_EXT_FILENAME.
@@ -45,16 +46,7 @@ EOF
   ;;
 
 open)
-  # the viewer itself shows no help, so show the keys first (they are hard to remember)
-  hint() {
-    clear
-    printf '\n\n   %s\n\n' "$1"
-    printf '   \e[1mSpace\e[0m or \e[1mFn+Down\e[0m (PgDn) = next      \e[1mFn+Up\e[0m (PgUp) = back\n'
-    printf '   \e[1m+\e[0m / \e[1m-\e[0m = zoom, arrows = move a zoomed picture      \e[1mq\e[0m = back to the file manager\n'
-    sleep 2
-  }
   if [[ $ext =~ ^($IMG)$ ]]; then
-    hint "PHOTOS of this folder, starting with $(basename "$f")"
     # every picture in the same folder, starting with the chosen one
     dir=$(dirname "$f"); before=(); after=(); found=0
     while IFS= read -r -d '' x; do
@@ -66,7 +58,7 @@ open)
       || { echo "Cannot show the picture (no framebuffer?)."; sleep 2; }
   elif [ "$ext" = pdf ]; then
     t=$(mktemp -d /tmp/mcv.XXXXXX)
-    hint "PDF: $(basename "$f") - preparing pages (up to 20)..."
+    echo "Preparing pages (up to 20)..."
     pdftoppm -r 110 -png -l 20 "$f" "$t/p" 2>/dev/null
     if ls "$t"/p*.png >/dev/null 2>&1; then
       fbi -a "$t"/p*.png 2>/dev/null
