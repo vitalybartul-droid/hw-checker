@@ -77,7 +77,16 @@ scan() {
   step=1; [ "$1" = quick ] && { step=$(( total/300 )); [ $step -lt 1 ] && step=1; }
   niters=$(( (total + step - 1) / step ))
 
+  SB=(); while IFS='=' read -r k d; do SB[$k]=$d; done < <(smart_vals "$dev")
+  KBASE=$(dmesg 2>/dev/null | wc -l); DN=$(basename "$dev")
+  sm_before=$(smart_line "$dev"); t=$(temp_now "$dev"); maxt=${t:-0}
+  local prebad=""                               # unstable / unreadable sectors known before we start
+  for k in pending uncorr media_errors; do [ "${SB[$k]:-0}" -gt 0 ] 2>/dev/null && prebad="$prebad $k=${SB[$k]}"; done
+
+  # the map starts below the header; the header grows by one line for each optional line in it
   local LN CL W MROWS K ncells used ST MAPTOP=8 cellmb cellsz
+  [ -n "$prebad" ] && MAPTOP=$((MAPTOP+1))
+  [ "$ROT" = 1 ] && MAPTOP=$((MAPTOP+1))
   LN=$(tput lines 2>/dev/null || echo 40); CL=$(tput cols 2>/dev/null || echo 120)
   W=$(( (CL - 10) / 2 )); [ $W -gt 100 ] && W=100; [ $W -lt 10 ] && W=10      # cells per row (cell + gap)
   MROWS=$(( (LN - MAPTOP - 13) / 2 )); [ $MROWS -lt 3 ] && MROWS=3           # map rows are 2 lines apart; keep room for status + result
@@ -90,11 +99,6 @@ scan() {
   local C_FAST=$'\e[42m \e[0m' C_OK=$'\e[1;7;33m \e[0m' C_SLOW=$'\e[41m \e[0m' C_VSLOW=$'\e[41;1;37m!\e[0m' C_BAD=$'\e[47;1;31mX\e[0m'
   local CELL=("$C_FAST" "$C_OK" "$C_SLOW" "$C_VSLOW" "$C_BAD")
 
-  SB=(); while IFS='=' read -r k d; do SB[$k]=$d; done < <(smart_vals "$dev")
-  KBASE=$(dmesg 2>/dev/null | wc -l); DN=$(basename "$dev")
-  sm_before=$(smart_line "$dev"); t=$(temp_now "$dev"); maxt=${t:-0}
-  local prebad=""                               # unstable / unreadable sectors known before we start
-  for k in pending uncorr media_errors; do [ "${SB[$k]:-0}" -gt 0 ] 2>/dev/null && prebad="$prebad $k=${SB[$k]}"; done
 
   clear; printf '\e[?25l'                       # hide the cursor while drawing
   title "SURFACE SCAN ($1) - $dev $model${RPM:+, $RPM}"
