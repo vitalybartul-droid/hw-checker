@@ -48,6 +48,12 @@ RegexIgnoreCase=true
 Open=$me open %f
 View=%view{ascii} $me view %f
 
+[hwc-text]
+Regex=\\\\.(txt|log|ini|inf|cfg|conf|csv|xml|json|md|nfo|htm|html|bat|cmd|ps1|reg|vbs|sh|py)\$
+RegexIgnoreCase=true
+Open=%view{ascii}
+View=%view{ascii}
+
 [hwc-office]
 Regex=\\\\.($OFF)\$
 RegexIgnoreCase=true
