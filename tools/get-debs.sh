@@ -33,7 +33,6 @@ c19e877582f5cf4f35e017f49c5abd40e21f3b1117413114b4544b4064948953  pool/universe/
 3042159c6d7d4dcb3df9d49cd21e49ecb57f4ba8c4153a72102f512a4fc534a2  pool/main/f/fuse3/libfuse3-3_3.14.0-5build1_amd64.deb
 2e2bf58e08848870834e31f7c38927bf8a862d875773faa8b4baa1768c09720b  pool/main/n/nvme-cli/nvme-cli_2.8-1ubuntu0.1_amd64.deb
 6cf86a02e66abf2fbdef9f97340775bbe0b58c7b687e146636cc1ed1702e4c59  pool/main/libn/libnvme/libnvme1t64_1.8-3ubuntu1_amd64.deb
-88bbcc66058087c2a435f78ccf7716275abae4b41867e55093f542b007855219  pool/main/h/hdparm/hdparm_9.65+ds-1.1build1_amd64.deb
 "
 
 mode=${1:-get}
