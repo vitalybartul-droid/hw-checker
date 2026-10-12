@@ -12,7 +12,13 @@ dmesg -n 1 2>/dev/null
 # We just unpack the files into the live filesystem instead of "dpkg -i":
 # no dpkg database, no maintainer scripts, no triggers - boots seconds faster.
 if ls "$M"/debs/*.deb >/dev/null 2>&1; then
-  for f in "$M"/debs/*.deb; do dpkg-deb -x "$f" / 2>/dev/null; done
+  # --keep-directory-symlink is ESSENTIAL: Debian 13 has /bin, /sbin, /lib as symlinks into /usr.
+  # Packages that still ship ./bin or ./lib (Ubuntu fuse3, ntfs-3g, nvme-cli) would otherwise
+  # replace those symlinks with plain directories (plain "dpkg-deb -x" does that) and the whole
+  # system breaks: boot stops at a blinking cursor.
+  for f in "$M"/debs/*.deb; do
+    dpkg-deb --fsys-tarfile "$f" 2>/dev/null | tar -x --keep-directory-symlink --no-same-owner -C / 2>/dev/null
+  done
   ldconfig 2>/dev/null                       # refresh the shared-library cache once
 fi
 
