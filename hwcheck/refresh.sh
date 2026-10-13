@@ -14,7 +14,7 @@ dev=$1
 target_ok "$dev" || { pause; exit 1; }
 sz=$(blockdev --getsize64 "$dev" 2>/dev/null)
 model=$(lsblk -dno MODEL "$dev" 2>/dev/null | xargs)
-ROT=$(cat "/sys/block/$(basename "$dev")/queue/rotational" 2>/dev/null)
+ROT=$(is_rotational "$dev")                       # SMART's answer beats the USB adapter's
 DN=$(basename "$dev")
 CH=32                                           # MiB per block, the same blocks as the surface scan
 totmb=$(( sz / 1048576 )); total=$(( (totmb + CH - 1) / CH ))

@@ -24,6 +24,7 @@ model=$(lsblk -dno MODEL "$dev" 2>/dev/null | xargs)
 ROT=$(cat "/sys/block/$(basename "$dev")/queue/rotational" 2>/dev/null)     # 1 = spinning HDD
 smart_detect "$dev"
 RPM=$(smartctl $SMARTD -i "$dev" 2>/dev/null | sed -n 's/^Rotation Rate: *//p' | head -1)
+case $RPM in *"Solid State"*) ROT=0 ;; *rpm*) ROT=1 ;; esac          # USB adapters often claim "rotational"
 TRAN=$(lsblk -dno TRAN "$dev" 2>/dev/null | tr -d ' ')
 # USB link speed (480 = USB 2.0): walk up sysfs from the disk to the USB device
 USBSPEED=""

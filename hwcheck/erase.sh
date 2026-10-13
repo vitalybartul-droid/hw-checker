@@ -23,7 +23,7 @@ sz=$(blockdev --getsize64 "$dev" 2>/dev/null)
 model=$(lsblk -dno MODEL "$dev" 2>/dev/null | xargs)
 serial=$(lsblk -dno SERIAL "$dev" 2>/dev/null | xargs)
 TRAN=$(lsblk -dno TRAN "$dev" 2>/dev/null | tr -d ' ')
-ROT=$(cat "/sys/block/$(basename "$dev")/queue/rotational" 2>/dev/null)
+ROT=$(is_rotational "$dev")                       # SMART's answer beats the USB adapter's
 gb=$(( sz / 1000000000 ))
 LS=$(blockdev --getss "$dev" 2>/dev/null); [ -n "$LS" ] && [ "$LS" -ge 512 ] || LS=512
 present() { [ -b "$dev" ] && [ -n "$(blockdev --getsize64 "$dev" 2>/dev/null)" ]; }

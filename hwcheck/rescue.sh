@@ -56,7 +56,7 @@ scan(){
   while read -r dev type; do
     [ "$type" = part ] && [ -b "$dev" ] || continue
     fs=$(field "$dev" FSTYPE); size=$(field "$dev" SIZE); label=$(field "$dev" LABEL); pk=$(field "$dev" PKNAME)
-    [ "$pk" = "$BOOTDISK" ] && continue
+    is_bootdisk "$pk" && continue
     bytes=$(lsblk -bdno SIZE "$dev" 2>/dev/null | tr -d ' ')
     rmv=$(cat "/sys/block/$(basename "$pk")/removable" 2>/dev/null)
     tran=$(lsblk -dno TRAN "$pk" 2>/dev/null | tr -d ' ')

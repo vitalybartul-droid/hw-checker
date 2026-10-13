@@ -121,7 +121,7 @@ installed)
   MNT=$(mktemp -d /tmp/wk.XXXXXX); TMPR=$(mktemp /tmp/wk.XXXXXX.reg)
   while read -r p fs pk; do
     [ "$fs" = ntfs ] || continue
-    [ -n "$BOOTDISK" ] && [ "/dev/$pk" = "$BOOTDISK" ] && continue
+    is_bootdisk "/dev/$pk" && continue
     findmnt -rn -S "$p" >/dev/null 2>&1 && continue                 # already mounted (rescue): skip
     # Windows itself needs > 15 GB: skip recovery / EFI-size NTFS partitions (fewer mounts, faster report)
     [ "$(blockdev --getsize64 "$p" 2>/dev/null || echo 0)" -ge 16000000000 ] || continue

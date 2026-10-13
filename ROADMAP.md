@@ -99,6 +99,11 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   Refresh without direct I/O flushes the disk cache before each check read; every scan (quick too)
   records which disk its lists belong to; NTFS partitions under 16 GB are skipped when looking for Windows.
 
+- **v2.1.1** — Ventoy: the stick is found through `/dev/mapper/ventoy` (device-mapper slaves), loop-mounted
+  ISO files and plain partitions by walking /sys, with the Ventoy partition labels as a fallback - Refresh /
+  Erase / Remap work again when started from Ventoy. SSDs behind USB adapters that claim to be "rotational"
+  are shown and handled as SSDs when SMART says "Solid State Device".
+
 ## Priority 1
 
 - **Disk WRITE test (destructive, for disks being wiped)** — in `D`, double confirmation + typed word:

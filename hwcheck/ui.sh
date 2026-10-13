@@ -57,11 +57,34 @@ getkey() {
 pause() { printf '\n  Press any key to return...'; IFS= read -rsn1 _; echo; }
 
 # The live stick we booted from: never offered as a disk to test or rescue.
-# lsblk -s walks from the mounted medium down to the whole device: stick partition -> stick,
-# Ventoy (device-mapper over a partition) -> stick, CD/ISO in a VM -> sr0.
-BOOTSRC=$(findmnt -no SOURCE /run/live/medium 2>/dev/null)
-BOOTDISK=""
-[ -n "$BOOTSRC" ] && BOOTDISK=$(lsblk -lnspo NAME,TYPE "$BOOTSRC" 2>/dev/null | awk '$2=="disk"||$2=="rom"{d=$1} END{print d}')
+# Walk in /sys from the device mounted at /run/live/medium down to the whole disk(s) under it:
+#   stick partition (sdb1) -> sdb;  CD/ISO in a VM -> sr0;
+#   Ventoy: /dev/mapper/ventoy (device-mapper) -> its slaves (sdb or sdb1) -> sdb;
+#   ISO file attached as a loop device -> the disk that holds the file.
+# Fallback for Ventoy: the disk with the Ventoy partitions (labels "Ventoy" / "VTOYEFI").
+_bd_walk() {                                    # _bd_walk NAME (e.g. dm-0, sdb1, loop0) -> whole disks
+  local n=$1 s f
+  [ -e "/sys/class/block/$n" ] || return
+  if ls "/sys/class/block/$n/slaves/" 2>/dev/null | grep -q .; then
+    for s in /sys/class/block/$n/slaves/*; do _bd_walk "$(basename "$s")"; done
+  elif [ -r "/sys/class/block/$n/loop/backing_file" ]; then
+    f=$(cat "/sys/class/block/$n/loop/backing_file")
+    s=$(findmnt -no SOURCE -T "$f" 2>/dev/null | head -1)
+    [ -b "$s" ] && _bd_walk "$(basename "$(readlink -f "$s")")"
+  elif [ -e "/sys/class/block/$n/partition" ]; then
+    basename "$(dirname "$(readlink -f "/sys/class/block/$n")")"
+  else
+    echo "$n"
+  fi
+}
+BOOTSRC=$(findmnt -no SOURCE /run/live/medium 2>/dev/null | head -1); BOOTSRC=${BOOTSRC%%\[*}
+BOOTDISKS=""
+[ -b "$BOOTSRC" ] && BOOTDISKS=$(_bd_walk "$(basename "$(readlink -f "$BOOTSRC")")" | sort -u | sed 's|^|/dev/|')
+if [ -z "$BOOTDISKS" ] && [ "${BOOTSRC##*/}" = ventoy ]; then
+  BOOTDISKS=$(lsblk -lnpo PKNAME,LABEL 2>/dev/null | awk '$2=="Ventoy"||$2=="VTOYEFI"{print $1}' | sort -u)
+fi
+BOOTDISK=$(echo "$BOOTDISKS" | head -1)          # the stick (normally exactly one disk)
+is_bootdisk() { [ -n "$1" ] && echo "$BOOTDISKS" | grep -qx "$1"; }
 
 # target_ok DEV — gate for the screens that WRITE to a disk (Erase, Remap, Refresh).
 # Fail-closed: if we cannot tell which disk is the ViCheck stick, nothing is written anywhere.
@@ -73,12 +96,8 @@ target_ok() {
     echo "  (Was the stick pulled out, or started in an unusual way?) Reboot from the stick and try again."
     return 1
   fi
-  if [ "$d" = "$BOOTDISK" ]; then echo "  This is the ViCheck stick - refusing."; return 1; fi
+  if is_bootdisk "$d"; then echo "  This is the ViCheck stick - refusing."; return 1; fi
   # the running system itself must not live on this disk
-  for p in /run/live/medium /run/live/persistence; do
-    findmnt -no SOURCE "$p" 2>/dev/null | grep -q . || continue
-    lsblk -lnspo NAME "$(findmnt -no SOURCE "$p")" 2>/dev/null | grep -qx "$d" && { echo "  The live system runs from this disk - refusing."; return 1; }
-  done
   return 0
 }
 
@@ -87,7 +106,7 @@ target_ok() {
 pick_disk() {
   local list=() d i
   while read -r d; do
-    [ "$d" = "$BOOTDISK" ] && continue
+    is_bootdisk "$d" && continue
     case $d in */zram*|*/ram*|*/loop*|*/sr*) continue ;; esac
     list+=("$d")
   done < <(lsblk -dnpo NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}')
@@ -153,6 +172,16 @@ smart_vals() {
                        /Error Information Log Entries/{gsub(/[ ,]/,"",$2); print "err_log="$2}'
   echo "$a" | awk '$2=="Reallocated_Sector_Ct"{print "realloc="$10} $2=="Current_Pending_Sector"{print "pending="$10}
                    $2=="Offline_Uncorrectable"{print "uncorr="$10} $2=="UDMA_CRC_Error_Count"{print "cable_crc="$10}'
+}
+
+# is_rotational DEV -> 1 (HDD) or 0 (SSD). Many USB-SATA adapters report every disk as rotational,
+# so the disk's own SMART answer ("Rotation Rate: Solid State Device" / "5400 rpm") wins when it has one.
+is_rotational() {
+  local r rr SMARTD=""; r=$(cat "/sys/block/$(basename "$1")/queue/rotational" 2>/dev/null)
+  smart_detect "$1" >/dev/null 2>&1               # (local SMARTD: the caller's choice is not changed)
+  rr=$(smartctl $SMARTD -i "$1" 2>/dev/null | sed -n 's/^Rotation Rate: *//p' | head -1)
+  case $rr in *"Solid State"*) r=0 ;; *rpm*) r=1 ;; esac
+  echo "${r:-0}"
 }
 
 # disk_id DEV -> "model serial bytes": tells a disk apart from the next one plugged in as the same /dev/sdX

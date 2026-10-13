@@ -212,9 +212,8 @@ edid_info() {  # $1 = path to edid file
 }
 
 # Device that holds this live stick (to skip it in the disk list)
-bootdev=""
-src=$(findmnt -no SOURCE /run/live/medium 2>/dev/null)
-[ -n "$src" ] && bootdev=$(lsblk -no PKNAME "$src" 2>/dev/null | head -1)
+# (ui.sh finds it - also through Ventoy and loop devices - as BOOTDISKS / is_bootdisk)
+. "$(dirname "$(readlink -f "$0")")/ui.sh"
 
 # Keep kernel messages (e.g. harmless ACPI/thermal firmware warnings) off the screen
 dmesg -n 1 2>/dev/null
@@ -491,14 +490,14 @@ ndisk=0
 for d in /sys/block/*; do
   n=$(basename "$d")
   case $n in loop*|ram*|zram*|sr*|fd*|dm-*|md*|mmcblk*boot*) continue;; esac
-  [ "$n" = "$bootdev" ] && continue
+  is_bootdisk "/dev/$n" && continue
   bytes=$(lsblk -dbno SIZE "/dev/$n" 2>/dev/null | tr -d ' ')
   [ "${bytes:-0}" -eq 0 ] && continue
   model=$(rd "$d/device/model")
   tran=$(lsblk -dno TRAN "/dev/$n" 2>/dev/null | tr -d ' ')
   if [[ $n == nvme* ]]; then t=NVMe
   elif [[ $n == mmcblk* ]]; then t=eMMC
-  elif [ "$(cat "$d/queue/rotational")" = 1 ]; then t=HDD
+  elif [ "$(is_rotational "/dev/$n")" = 1 ]; then t=HDD
   else t=SSD; fi
   [ "$tran" = usb ] && t="$t (USB)"
   extra=""
