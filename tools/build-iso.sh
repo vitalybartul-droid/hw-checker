@@ -26,6 +26,14 @@ HOOK="hooks=file:///run/live/medium/live/config-hooks/9990-hwcheck"
 # loglevel=3: hide harmless firmware warnings (SGX off, ACPI quirks) on screen at boot; dmesg keeps them
 EXTRA="memtest=1 loglevel=3 $HOOK"
 
+# the extra .debs must be exactly the pinned, hash-checked set - never build with missing or stray ones
+if ! "$REPO/tools/get-debs.sh" --check > /tmp/vicheck-debcheck.$$ 2>&1; then
+  grep -vE '^ok' /tmp/vicheck-debcheck.$$ >&2; rm -f /tmp/vicheck-debcheck.$$
+  echo "build-iso: the .deb packages in hwcheck/debs/ are not right - run tools/get-debs.sh first." >&2
+  exit 1
+fi
+rm -f /tmp/vicheck-debcheck.$$
+
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 I=$W/iso            # files to put into the ISO, laid out by their path in the ISO
 mkdir -p "$I/boot/grub" "$I/isolinux" "$I/hwcheck" "$I/live/config-hooks"

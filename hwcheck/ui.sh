@@ -57,7 +57,30 @@ getkey() {
 pause() { printf '\n  Press any key to return...'; IFS= read -rsn1 _; echo; }
 
 # The live stick we booted from: never offered as a disk to test or rescue.
-BOOTDISK=$(lsblk -npo PKNAME "$(findmnt -no SOURCE /run/live/medium 2>/dev/null)" 2>/dev/null | head -1)
+# lsblk -s walks from the mounted medium down to the whole device: stick partition -> stick,
+# Ventoy (device-mapper over a partition) -> stick, CD/ISO in a VM -> sr0.
+BOOTSRC=$(findmnt -no SOURCE /run/live/medium 2>/dev/null)
+BOOTDISK=""
+[ -n "$BOOTSRC" ] && BOOTDISK=$(lsblk -lnspo NAME,TYPE "$BOOTSRC" 2>/dev/null | awk '$2=="disk"||$2=="rom"{d=$1} END{print d}')
+
+# target_ok DEV — gate for the screens that WRITE to a disk (Erase, Remap, Refresh).
+# Fail-closed: if we cannot tell which disk is the ViCheck stick, nothing is written anywhere.
+# (HWC_TEST=1 skips only the "stick unknown" check - for development on loop disks, never set on the stick.)
+target_ok() {
+  local d=$1 p
+  if [ -z "$BOOTDISK" ] && [ "$HWC_TEST" != 1 ]; then
+    printf '  \e[1;31mCannot tell which disk is the ViCheck stick - refusing to write to any disk.\e[0m\n'
+    echo "  (Was the stick pulled out, or started in an unusual way?) Reboot from the stick and try again."
+    return 1
+  fi
+  if [ "$d" = "$BOOTDISK" ]; then echo "  This is the ViCheck stick - refusing."; return 1; fi
+  # the running system itself must not live on this disk
+  for p in /run/live/medium /run/live/persistence; do
+    findmnt -no SOURCE "$p" 2>/dev/null | grep -q . || continue
+    lsblk -lnspo NAME "$(findmnt -no SOURCE "$p")" 2>/dev/null | grep -qx "$d" && { echo "  The live system runs from this disk - refusing."; return 1; }
+  done
+  return 0
+}
 
 # pick_disk "question" -> DISK=/dev/xxx ; return 1 = cancelled / no disk.
 # One disk: picked silently. Several: one digit, no Enter.
@@ -131,6 +154,11 @@ smart_vals() {
   echo "$a" | awk '$2=="Reallocated_Sector_Ct"{print "realloc="$10} $2=="Current_Pending_Sector"{print "pending="$10}
                    $2=="Offline_Uncorrectable"{print "uncorr="$10} $2=="UDMA_CRC_Error_Count"{print "cable_crc="$10}'
 }
+
+# disk_id DEV -> "model serial bytes": tells a disk apart from the next one plugged in as the same /dev/sdX
+disk_id() { echo "$(lsblk -dno MODEL,SERIAL "$1" 2>/dev/null | xargs) $(blockdev --getsize64 "$1" 2>/dev/null)"; }
+# scan_is_this_disk DEV: the slow/bad lists in /tmp/scan-<name>.* were made on this very disk
+scan_is_this_disk() { local f=/tmp/scan-$(basename "$1").id; [ -s "$f" ] && [ "$(cat "$f")" = "$(disk_id "$1")" ]; }
 
 # Append one test result to the report, under its own TEST RESULTS section
 # (otherwise results would appear glued to the last hardware section, BATTERY).

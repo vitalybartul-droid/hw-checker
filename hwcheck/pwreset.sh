@@ -15,16 +15,38 @@ clear; title "WINDOWS PASSWORD"
 echo "  Empties the password of a LOCAL account so you can log in with no password."
 echo "  It does NOT work for Microsoft (online) accounts."
 echo
-MNT=/mnt/win; mkdir -p "$MNT"; windev=""
-echo "  Looking for a Windows installation..."
+MNT=/mnt/win; mkdir -p "$MNT"; windev=""; WINS=()
+echo "  Looking for Windows installations..."
 while read -r dev fstype; do
   [ "$fstype" = ntfs ] || continue
   is_bitlocker "$dev" && { echo "  $dev: BitLocker-encrypted, skipped."; continue; }
   { mount -t ntfs3 -o ro "$dev" "$MNT" 2>/dev/null || mount -t ntfs-3g -o ro "$dev" "$MNT" 2>/dev/null; } || continue
-  [ -f "$MNT/Windows/System32/config/SAM" ] && { windev="$dev"; umount "$MNT"; break; }
+  [ -f "$MNT/Windows/System32/config/SAM" ] && WINS+=("$dev")
   umount "$MNT" 2>/dev/null
 done < <(lsblk -pnro NAME,FSTYPE 2>/dev/null)
-[ -z "$windev" ] && { echo "  No Windows found (no readable SAM). The drive may be BitLocker-encrypted."; pause; exit 1; }
+[ ${#WINS[@]} -eq 0 ] && { echo "  No Windows found (no readable SAM). The drive may be BitLocker-encrypted."; pause; exit 1; }
+if [ ${#WINS[@]} -eq 1 ]; then
+  windev=${WINS[0]}
+else
+  # several Windows (two disks, or a client disk next to the PC's own): never guess which one
+  echo; echo "  More than one Windows found:"
+  i=1
+  for d in "${WINS[@]:0:9}"; do
+    pk=$(lsblk -npo PKNAME "$d" 2>/dev/null | head -1)
+    printf '    %s %d %s  %-12s %7s  %-12s on %s %s\n' "$KEYC" $i "$KEYN" "$d" "$(lsblk -dno SIZE "$d" | xargs)" \
+      "$(lsblk -dno LABEL "$d" | xargs)" "$pk" "$(lsblk -dno MODEL,TRAN "$pk" 2>/dev/null | xargs)"
+    i=$((i+1))
+  done
+  n=${#WINS[@]}; [ $n -gt 9 ] && n=9
+  keybar 1-$n "Windows" Q Cancel
+  while :; do
+    getkey
+    case $KEY in
+      q) exit 0 ;;
+      [1-9]) [ "$KEY" -le $n ] && { windev=${WINS[$((KEY-1))]}; break; } ;;
+    esac
+  done
+fi
 
 echo "  Windows system drive: $windev"
 # remove_hiberfile discards a saved Windows session (safe); recover replays the NTFS journal.

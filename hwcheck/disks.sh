@@ -73,7 +73,7 @@ kern_polled() {
 scan() {
   local CHUNK=32 total step niters START i=0 b=0 ms t t0 t1 el pct eta d k alerts lv zf zms kp=0 tt qalerts="" bgpid="" BGF=/tmp/.scanbg.$$
   local good=0 ok=0 slow=0 vslow=0 bad=0 worst=0 readms=0 badlist="" maxt sm_before sm_after chg
-  total=$(( sz / (CHUNK*1024*1024) )); [ $total -lt 1 ] && total=1
+  total=$(( (sz + CHUNK*1048576 - 1) / (CHUNK*1048576) )); [ $total -lt 1 ] && total=1   # last, shorter block included
   step=1; [ "$1" = quick ] && { step=$(( total/300 )); [ $step -lt 1 ] && step=1; }
   niters=$(( (total + step - 1) / step ))
 
@@ -128,7 +128,9 @@ scan() {
   }
 
   SLOWF=/tmp/scan-$DN.slow; : > "$SLOWF.tmp"
-  BADF=/tmp/scan-$DN.bad                         # unreadable blocks, for Remap (M); kept per disk
+  BADF=/tmp/scan-$DN.bad; : > "$BADF"            # unreadable blocks, for Remap (M): only from THIS scan
+  # which physical disk the lists belong to: sdb today may be another disk after a swap
+  [ "$1" = full ] && disk_id "$dev" > "/tmp/scan-$DN.id"
   START=$(date +%s); alerts=""
   local stop=0 lost=0
   trap 'stop=1' INT                             # Ctrl+C ends the scan but still prints the result

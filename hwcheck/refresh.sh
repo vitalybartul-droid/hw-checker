@@ -11,7 +11,7 @@ export LC_ALL=C
 
 dev=$1
 [ -b "$dev" ] || { echo "  No such disk: $dev"; pause; exit 1; }
-[ "$dev" = "$BOOTDISK" ] && { echo "  This is the boot stick - refusing."; pause; exit 1; }
+target_ok "$dev" || { pause; exit 1; }
 sz=$(blockdev --getsize64 "$dev" 2>/dev/null)
 model=$(lsblk -dno MODEL "$dev" 2>/dev/null | xargs)
 ROT=$(cat "/sys/block/$(basename "$dev")/queue/rotational" 2>/dev/null)
@@ -38,8 +38,10 @@ echo "  Reads every block and writes the SAME data back, then reads it again to 
 echo "  Your files stay. Typical use: an SSD with many slow zones in the surface scan."
 echo "  Blocks that cannot be read are skipped (not overwritten) and listed at the end."
 echo
-nslow=0; [ -f "$SLOWF" ] && nslow=$(grep -c . "$SLOWF")
-if [ -f "$SLOWF" ]; then
+nslow=0; [ -f "$SLOWF" ] && scan_is_this_disk "$dev" && nslow=$(grep -c . "$SLOWF")
+if [ -f "$SLOWF" ] && ! scan_is_this_disk "$dev"; then
+  echo "  The last full scan of $dev was a DIFFERENT disk: run F on this one to refresh only its slow zones."
+elif [ -f "$SLOWF" ]; then
   echo "  Last full scan: $nslow block(s) much slower than this disk's typical speed ($(( nslow * CH / 1024 )) GB)."
 else
   echo "  No full scan of this disk yet: run F first to refresh only the slow zones."
@@ -118,7 +120,13 @@ for b in $list; do
   t1=$(date +%s%N); r1ms=$(( r1ms + (t1-t0)/1000000 ))
   sum1=$(md5sum < "$BUF")
   if ! ( trap '' INT; dd if="$BUF" of="$dev" bs=1M count=$n seek=$(( b*CH )) $OD conv=notrunc,fsync status=none 2>/dev/null ); then
-    werr=$((werr+1)); badlist="$badlist $(( b*CH/1024 ))G(write)"; continue
+    # a disk that refuses writes is failing, and this block may now be half-written: stop at once,
+    # keep its original content
+    werr=$((werr+1)); badlist="$badlist $(( b*CH/1024 ))G(write)"; cp "$BUF" "/tmp/refresh-block-$b.bin" 2>/dev/null
+    if [ ! -b "$dev" ] || [ -z "$(blockdev --getsize64 "$dev" 2>/dev/null)" ]; then lost=1; fi
+    printf '\e[?25h\n\n  \e[1;37;41m STOPPED: write error at %s GB - the disk refuses writes. \e[0m\n' "$(( b*CH/1024 ))"
+    echo "  The original content of that block is saved in /tmp/refresh-block-$b.bin (lost on reboot - copy it off if needed)."
+    stop=1; break
   fi
   t0=$(date +%s%N)
   sum2=$( ( trap '' INT; dd if="$dev" bs=1M count=$n skip=$(( b*CH )) $ID status=none 2>/dev/null ) | md5sum )
@@ -149,14 +157,14 @@ sync
 sp1="-"; sp2="-"
 [ $r1ms -gt 0 ] && sp1=$(( mbdone * 1049 / r1ms ))
 [ $r2ms -gt 0 ] && sp2=$(( mbdone * 1049 / r2ms ))
-echo "  Refreshed    : $okn of $todo blocks ($(( mbdone / 1024 )) GB) in $(elapsed $st)$([ $stop = 1 ] && [ $lost = 0 ] && echo '  - STOPPED by Ctrl+C')"
+echo "  Refreshed    : $okn of $todo blocks ($(( mbdone / 1024 )) GB) in $(elapsed $st)$([ $stop = 1 ] && [ $lost = 0 ] && [ $werr = 0 ] && echo '  - STOPPED by Ctrl+C')"
 echo "  Read speed   : before ${sp1} MB/s  ->  check read ${sp2} MB/s   (right after writing; the next F scan is the real comparison)"
 [ $unread -gt 0 ] && printf '  \e[1;31mUnreadable   : %d block(s), skipped, data there is already damaged\e[0m\n' $unread
-[ $werr -gt 0 ]   && printf '  \e[1;31mWrite errors : %d block(s) - the disk refuses writes there\e[0m\n' $werr
 [ -n "$badlist" ] && echo "  Near         :$badlist"
 if [ $lost = 1 ]; then res="STOPPED - the disk dropped off; reconnect (SATA or a powered adapter) before trusting it"
 elif [ $vfail -gt 0 ]; then res="FAILED - data read back different, disk unreliable"
-elif [ $unread -gt 0 ] || [ $werr -gt 0 ]; then res="done with $(( unread + werr )) bad block(s) skipped - disk is failing"
+elif [ $werr -gt 0 ]; then res="STOPPED - write error, disk is failing; the block may be damaged (copy saved in /tmp)"
+elif [ $unread -gt 0 ]; then res="done with $unread unreadable block(s) skipped - disk is failing"
 elif [ $stop = 1 ]; then res="stopped by user"
 else res="done, no errors"; fi
 [ -n "$ID" ] || echo "  Note         : the adapter refused direct I/O - speeds include the RAM cache."

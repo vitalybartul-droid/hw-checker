@@ -79,6 +79,16 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   bits (Enter never runs a file). HDD scan thresholds follow the position on the platter.
   Boot fix: extra packages unpacked with `tar --keep-directory-symlink`.
 
+- **v2.0.1** — safety fixes after a code review. Erase is green "ERASED" only if the method really
+  finished and all 64 points could be read back (otherwise NOT COMPLETE / UNKNOWN); overwrite, quick
+  wipe, full scan and the fingerprint reach the very last sector. Erase / Remap / Refresh refuse to
+  write anywhere if the ViCheck stick cannot be identified (also works for CD/VM and Ventoy boot).
+  Remap: SMART LBAs in logical sectors, kernel sectors in 512 B, alignment offset honoured; aborts if
+  a partition stays mounted. Scan lists are cleared per scan and tied to the disk (model + serial +
+  size), so a different disk on the same /dev name is never refreshed/remapped by them. Refresh stops
+  at the first write error and keeps the block's copy. Password reset asks which Windows when there
+  are several. `build-iso.sh` refuses to build without the exact pinned, hash-checked .debs.
+
 ## Priority 1
 
 - **Disk WRITE test (destructive, for disks being wiped)** — in `D`, double confirmation + typed word:

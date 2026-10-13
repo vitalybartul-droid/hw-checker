@@ -14,13 +14,21 @@ export LC_ALL=C
 
 dev=$1
 [ -b "$dev" ] || { echo "  No such disk: $dev"; pause; exit 1; }
-[ "$dev" = "$BOOTDISK" ] && { echo "  This is the boot stick - refusing."; pause; exit 1; }
+target_ok "$dev" || { pause; exit 1; }
 DN=$(basename "$dev")
 model=$(lsblk -dno MODEL "$dev" 2>/dev/null | xargs)
 sz=$(blockdev --getsize64 "$dev" 2>/dev/null)
-PB=$(blockdev --getpbsz "$dev" 2>/dev/null); [ -n "$PB" ] && [ "$PB" -ge 512 ] || PB=512
-maxsec=$(( sz / PB ))                            # physical sectors on the disk
-SPB=$(( PB / 512 ))                              # 512-byte LBAs per physical sector
+# Units: everything below counts PHYSICAL sectors k, which start at byte AO + k*PB.
+#   LS = logical sector (what SMART LBAs count: 512, or 4096 on 4Kn disks)
+#   PB = physical sector (4096 on most HDDs since ~2011, also on 512e ones)
+#   AO = alignment offset (almost always 0; old "jumpered" 512e disks: 3584)
+#   kernel "I/O error ... sector N" is always in 512-byte units.
+LS=$(blockdev --getss "$dev" 2>/dev/null); [ -n "$LS" ] && [ "$LS" -ge 512 ] || LS=512
+PB=$(blockdev --getpbsz "$dev" 2>/dev/null); [ -n "$PB" ] && [ "$PB" -ge "$LS" ] || PB=$LS
+AO=$(cat "/sys/block/$(basename "$dev")/alignment_offset" 2>/dev/null); [[ $AO =~ ^[0-9]+$ ]] || AO=0
+[ $(( AO % LS )) = 0 ] || AO=0
+maxsec=$(( (sz - AO) / PB ))                     # whole physical sectors on the disk
+b2k() { local b=$(( $1 - AO )); [ $b -lt 0 ] && b=0; echo $(( b / PB )); }   # byte -> physical sector
 TRAN=$(lsblk -dno TRAN "$dev" 2>/dev/null | tr -d ' ')
 gone() { [ ! -b "$dev" ] || [ -z "$(blockdev --getsize64 "$dev" 2>/dev/null)" ]; }
 counters() { smart_vals "$dev" | awk -F= '$1=="pending"||$1=="realloc"||$1=="uncorr"{printf "%s=%s ", $1, $2}'; }
@@ -34,21 +42,22 @@ echo
 smart_detect "$dev" >/dev/null 2>&1
 before=$(counters)
 regions=()
-# 1) SMART self-test log: last column = LBA_of_first_error (512-byte LBA) when a test failed
+around() { local k; k=$(b2k "$1"); echo "$(( k > 256 ? k - 256 : 0 )) 512"; }   # 512 physical sectors around a byte
+# 1) SMART self-test log: last column = LBA_of_first_error (in LOGICAL sectors) when a test failed
 while read -r lba; do
-  [ -n "$lba" ] && regions+=("$(( lba / SPB > 256 ? lba / SPB - 256 : 0 )) 512")
+  [ -n "$lba" ] && regions+=("$(around $(( lba * LS )))")
 done < <(smartctl $SMARTD -l selftest "$dev" 2>/dev/null | awk '/^# *[0-9]/ && $NF ~ /^[0-9]+$/ {print $NF}' | sort -u | head -8)
 n_smart=${#regions[@]}
-# 2) kernel log: I/O error sectors on this disk (512-byte units)
+# 2) kernel log: I/O error sectors on this disk (always 512-byte units)
 while read -r lba; do
-  [ -n "$lba" ] && regions+=("$(( lba / SPB > 256 ? lba / SPB - 256 : 0 )) 512")
+  [ -n "$lba" ] && regions+=("$(around $(( lba * 512 )))")
 done < <(dmesg 2>/dev/null | sed -n "s/.*I\/O error, dev $DN, sector \([0-9]*\).*/\1/p" | sort -un | head -16)
 n_kern=$(( ${#regions[@]} - n_smart ))
 # 3) unreadable 32 MiB blocks from the last surface scan
 n_scan=0
-if [ -s "/tmp/scan-$DN.bad" ]; then
+if [ -s "/tmp/scan-$DN.bad" ] && scan_is_this_disk "$dev"; then
   while read -r b; do
-    regions+=("$(( b * 33554432 / PB )) $(( 33554432 / PB ))"); n_scan=$((n_scan+1))
+    regions+=("$(b2k $(( b * 33554432 ))) $(( 33554432 / PB + 1 ))"); n_scan=$((n_scan+1))
   done < <(sort -un "/tmp/scan-$DN.bad" | head -16)
 fi
 echo "  SMART now    : ${before:-not available}"
@@ -63,13 +72,17 @@ fi
 keybar Y "Start" Q Back
 while :; do getkey; case $KEY in y) break ;; q|n) exit 0 ;; esac; done
 
-# partitions mounted by file rescue must be released first
+# partitions mounted by file rescue must be released first - and must really be released
 for p in $(lsblk -lnpo NAME "$dev" | tail -n +2); do findmnt -rn -S "$p" >/dev/null 2>&1 && umount "$p" 2>/dev/null; done
+if lsblk -lnpo MOUNTPOINT "$dev" | grep -q .; then
+  echo; echo "  A partition of this disk is still in use (open files in file rescue?) - cannot remap."; pause; exit 1
+fi
 
 # ---------- probe each region; write zeros to each physical sector that cannot be read ----------
 CH=$(( 65536 / PB )); [ $CH -lt 1 ] && CH=1      # probe 64 KiB at a time, single sectors only on error
 fixed=0 still=0 probed=0 bad=0 stop=0 lost=0 list=""
-readsec() { ( trap '' INT; dd if="$dev" of=/dev/null bs=$PB count=${2:-1} skip=$1 iflag=direct status=none 2>/dev/null ); }
+readsec() { ( trap '' INT; dd if="$dev" of=/dev/null bs=$PB count=${2:-1} skip=$(( AO + $1 * PB )) iflag=direct,skip_bytes status=none 2>/dev/null ); }
+lba() { echo $(( (AO + $1 * PB) / LS )); }      # physical sector -> LBA as SMART shows it
 trap 'stop=1' INT
 echo
 for r in "${regions[@]}"; do
@@ -79,16 +92,16 @@ for r in "${regions[@]}"; do
   while [ $s -lt $(( first + cnt )) ] && [ $stop = 0 ]; do
     n=$CH; [ $(( s + n )) -gt $(( first + cnt )) ] && n=$(( first + cnt - s ))
     printf '\r\e[K  Checking sector %d (%s GB)   unreadable %d, fixed %d, still bad %d   (Ctrl+C = stop)' \
-      $(( s * SPB )) $(( s * PB / 1000000000 )) $bad $fixed $still
+      $(lba $s) $(( (AO + s * PB) / 1000000000 )) $bad $fixed $still
     if ! readsec $s $n; then
       gone && { lost=1; break 2; }
       for (( x = s; x < s + n && stop == 0; x++ )); do
         readsec $x && continue
         gone && { lost=1; break 3; }
         bad=$((bad+1))
-        ( trap '' INT; dd if=/dev/zero of="$dev" bs=$PB count=1 seek=$x oflag=direct conv=notrunc,fsync status=none 2>/dev/null )
+        ( trap '' INT; dd if=/dev/zero of="$dev" bs=$PB count=1 seek=$(( AO + x * PB )) oflag=direct,seek_bytes conv=notrunc,fsync status=none 2>/dev/null )
         if readsec $x; then fixed=$((fixed+1)); else still=$((still+1)); fi
-        list="$list $(( x * SPB ))"
+        list="$list $(lba $x)"
       done
     fi
     probed=$(( probed + n )); s=$(( s + n ))
@@ -101,7 +114,7 @@ sync
 after=$(counters)
 echo "  Probed       : $probed sectors around ${#regions[@]} place(s)$([ $stop = 1 ] && echo '  - STOPPED by Ctrl+C')"
 echo "  Unreadable   : $bad   rewritten and readable now: $fixed   still unreadable: $still"
-[ -n "$list" ] && echo "  Sectors      :$(echo $list | tr ' ' '\n' | head -12 | tr '\n' ' ')$([ $bad -gt 12 ] && echo ...)"
+[ -n "$list" ] && echo "  Sectors (LBA):$(echo $list | tr ' ' '\n' | head -12 | tr '\n' ' ')$([ $bad -gt 12 ] && echo ...)"
 echo "  SMART before : ${before:-n/a}"
 echo "  SMART after  : ${after:-n/a}"
 if [ $lost = 1 ]; then res="disk dropped off while reading a bad sector - connect it by SATA (or a powered adapter) and run M again"

@@ -18,23 +18,28 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 dev=$1
 [ -b "$dev" ] || { echo "  No such disk: $dev"; pause; exit 1; }
-[ "$dev" = "$BOOTDISK" ] && { echo "  This is the boot stick - refusing."; pause; exit 1; }
+target_ok "$dev" || { pause; exit 1; }
 sz=$(blockdev --getsize64 "$dev" 2>/dev/null)
 model=$(lsblk -dno MODEL "$dev" 2>/dev/null | xargs)
 serial=$(lsblk -dno SERIAL "$dev" 2>/dev/null | xargs)
 TRAN=$(lsblk -dno TRAN "$dev" 2>/dev/null | tr -d ' ')
 ROT=$(cat "/sys/block/$(basename "$dev")/queue/rotational" 2>/dev/null)
 gb=$(( sz / 1000000000 ))
+LS=$(blockdev --getss "$dev" 2>/dev/null); [ -n "$LS" ] && [ "$LS" -ge 512 ] || LS=512
+present() { [ -b "$dev" ] && [ -n "$(blockdev --getsize64 "$dev" 2>/dev/null)" ]; }
 if [ "$TRAN" = nvme ]; then KIND="NVMe SSD"; elif [ "$ROT" = 1 ]; then KIND="HDD"; else KIND="SSD"; fi
 [ "$TRAN" = usb ] && KIND="$KIND via USB"
 
 # ---------- before / after fingerprint of 64 points spread over the disk ----------
 SAMPLES=64
+# Point 0 = the first MiB, the last point = the last MiB ending exactly at the last sector.
 fingerprint() {                                 # -> one line per point: "<md5>" or "ZERO" or "ERR"
-  local n mb=$(( sz / 1048576 )) off
+  local n last=$(( sz - 1048576 )) off
+  [ $last -lt 0 ] && last=0
   for n in $(seq 0 $(( SAMPLES - 1 ))); do
-    off=$(( (mb - 1) * n / (SAMPLES - 1) ))
-    dd if="$dev" bs=1M count=1 skip=$off iflag=direct status=none 2>/dev/null \
+    off=$(( last * n / (SAMPLES - 1) / LS * LS ))
+    [ $n = $(( SAMPLES - 1 )) ] && off=$last
+    dd if="$dev" bs=1M count=1 skip=$off iflag=direct,skip_bytes status=none 2>/dev/null \
       | { h=$(md5sum | cut -d' ' -f1)
           case $h in b6d81b360a5672d80c27430f39153e2c) echo ZERO ;; d41d8cd98f00b204e9800998ecf8427e) echo ERR ;; *) echo "$h" ;; esac; }
   done
@@ -74,17 +79,22 @@ run_wait() {                                    # run_wait "estimate text" cmd..
 
 # ---------- method 1: quick ----------
 m_quick() {
-  local p ok=""
-  for p in $(lsblk -lnpo NAME "$dev" | tail -n +2 | tac); do wipefs -a -q "$p" 2>/dev/null; done
-  wipefs -a -q "$dev" 2>/dev/null
+  local p ok="" fail=""
+  for p in $(lsblk -lnpo NAME "$dev" | tail -n +2 | tac); do wipefs -a -q "$p" 2>/dev/null || fail="$fail wipefs-$(basename "$p")"; done
+  wipefs -a -q "$dev" 2>/dev/null || fail="$fail wipefs"
   if [ "$ROT" != 1 ]; then
-    blkdiscard -f "$dev" 2>/dev/null && ok="TRIM of the whole disk done"
+    blkdiscard -f "$dev" 2>/dev/null && ok="TRIM of the whole disk done"    # optional: USB adapters often refuse it
   fi
-  # also clear the first and last 32 MiB (boot code, GPT backup at the end, leftovers of old tables)
-  local mb=$(( sz / 1048576 ))
-  dd if=/dev/zero of="$dev" bs=1M count=32 oflag=direct status=none conv=fsync 2>/dev/null
-  dd if=/dev/zero of="$dev" bs=1M count=32 seek=$(( mb - 32 )) oflag=direct status=none conv=fsync 2>/dev/null
+  # also clear the first and last 32 MiB (boot code, GPT backup at the END, leftovers of old tables);
+  # the end is counted in bytes from the real last sector, not in whole MiB
+  local n=33554432; [ $n -gt $sz ] && n=$sz
+  dd if=/dev/zero of="$dev" bs=$n count=1 oflag=direct status=none conv=notrunc,fsync 2>/dev/null || fail="$fail start"
+  dd if=/dev/zero of="$dev" bs=$n count=1 seek=$(( sz - n )) oflag=direct,seek_bytes status=none conv=notrunc,fsync 2>/dev/null || fail="$fail end"
   reread
+  if [ -n "$fail" ] || ! present; then
+    METHOD="quick wipe - FAILED (${fail# }${fail:+ }$(present || echo 'disk gone'))"; return 1
+  fi
+  COMPLETE=1
   METHOD="quick wipe (partitions + signatures removed${ok:+, $ok})"
   [ "$ROT" = 1 ] && NOTE="HDD: the old files are still physically on the disk - use Secure or Overwrite before selling."
   [ "$ROT" != 1 ] && [ -z "$ok" ] && NOTE="TRIM not supported here (USB adapter?) - old data may still be readable."
@@ -111,7 +121,7 @@ m_nvme() {
     run_wait "a few seconds to a minute" nvme format "$dev" --lbaf=$lbaf --ses=1 --force; rc=$?
   fi
   [ $rc -ne 0 ] && { echo "  Failed:"; tail -3 /tmp/erase.out | sed 's/^/    /'; return 1; }
-  reread; METHOD="NVMe secure format ($what)"
+  reread; METHOD="NVMe secure format ($what)"; COMPLETE=1
 }
 
 # ---------- method 2b: ATA Secure Erase (SATA SSD / HDD) ----------
@@ -149,12 +159,12 @@ m_ata() {
     echo "  If the drive is now locked, its password is: p   (hdparm --security-disable p)"
     return 1
   fi
-  reread; METHOD="ATA Secure Erase${enh:+ enhanced}"
+  reread; METHOD="ATA Secure Erase${enh:+ enhanced}"; COMPLETE=1
 }
 
 # ---------- method 3: overwrite with zeros ----------
 m_zero() {
-  local CH=64 total b=0 st now pct sp eta errs=0 errlist="" stop=0 ms0 done_mb=0 lastp=0
+  local CH=64 total b=0 st now pct sp=0 eta errs=0 errlist="" stop=0 ms0 done_mb=0 lastp=0 lost=0
   local totmb=$(( sz / 1048576 )) n
   total=$(( (totmb + CH - 1) / CH ))
   local OF=oflag=direct
@@ -166,7 +176,7 @@ m_zero() {
     n=$(( totmb - b*CH )); [ $n -gt $CH ] && n=$CH                   # last chunk: only up to the end
     if ! dd if=/dev/zero of="$dev" bs=1M count=$n seek=$(( b*CH )) $OF status=none 2>/dev/null; then
       [ $stop = 1 ] && break
-      [ -b "$dev" ] && [ -n "$(blockdev --getsize64 "$dev" 2>/dev/null)" ] || { echo; echo "  The disk disappeared during writing."; break; }
+      present || { echo; echo "  The disk disappeared during writing."; lost=1; break; }
       errs=$((errs+1)); errlist="$errlist $(( b*CH/1024 ))G"
     fi
     b=$((b+1)); now=$(date +%s)
@@ -179,11 +189,19 @@ m_zero() {
     fi
   done
   trap - INT; printf '\e[?25h\n'
+  # the last part of the disk that is smaller than 1 MiB (byte-exact up to the last sector)
+  local rem=$(( sz - totmb * 1048576 ))
+  if [ $stop = 0 ] && [ $lost = 0 ] && [ $rem -gt 0 ]; then
+    dd if=/dev/zero of="$dev" bs=$rem count=1 seek=$(( totmb * 1048576 )) oflag=${OF:+direct,}seek_bytes conv=notrunc status=none 2>/dev/null \
+      || { errs=$((errs+1)); errlist="$errlist end"; }
+  fi
   sync
   reread
+  if [ $lost = 1 ]; then METHOD="overwrite with zeros - STOPPED, the disk disappeared at $(( b*100/total ))%"; NOTE="Reconnect it (SATA or a powered adapter) and erase again."; return 1; fi
   if [ $stop = 1 ]; then METHOD="overwrite with zeros - STOPPED at $(( b*100/total ))%"; NOTE="Only the first part of the disk was erased."; return 1; fi
   METHOD="overwrite with zeros (${sp} MB/s, $(elapsed $st))"
-  [ $errs -gt 0 ] && NOTE="WRITE ERRORS near:$errlist - the disk is failing, do not sell it."
+  if [ $errs -gt 0 ]; then NOTE="WRITE ERRORS near:$errlist - those places may still hold old data; the disk is failing, do not sell it."; return 1; fi
+  COMPLETE=1
   return 0
 }
 
@@ -249,7 +267,7 @@ echo
 unmount_all || { echo "  A partition of this disk is still in use - cannot erase."; pause; exit 1; }
 echo "  Taking fingerprints of $SAMPLES points (to prove the erase afterwards)..."
 fingerprint > /tmp/erase.before
-METHOD=""; NOTE=""
+METHOD=""; NOTE=""; COMPLETE=0
 trap '' INT                                     # Ctrl+C must not interrupt a firmware erase
 case $M in
   1) m_quick ;;
@@ -266,7 +284,14 @@ read -r chg empty same unread < <(compare_fp /tmp/erase.before /tmp/erase.after)
 echo
 printf '  Method   : %s\n' "$METHOD"
 printf '  Check    : %d of %d points had data and are now different, %d were already empty, %d unchanged%s\n' "$chg" "$SAMPLES" "$empty" "$same" "$( [ "$unread" -gt 0 ] && echo ", $unread unreadable")"
-if [ "$same" -eq 0 ]; then
+# Green only when the method really finished AND every point could be read back.
+if ! present; then
+  printf '  Result   : \e[1;31mUNKNOWN - the disk is not readable after the erase (dropped off?)\e[0m\n'; res="UNKNOWN (disk not readable afterwards)"
+elif [ "$COMPLETE" != 1 ]; then
+  printf '  Result   : \e[1;31mNOT COMPLETE - the erase did not finish, old data may remain\e[0m\n'; res="NOT COMPLETE"
+elif [ "$unread" -gt 0 ]; then
+  printf '  Result   : \e[1;31mUNKNOWN - %d point(s) cannot be read, the erase cannot be proven\e[0m\n' "$unread"; res="UNKNOWN ($unread points unreadable)"
+elif [ "$same" -eq 0 ]; then
   printf '  Result   : \e[1;32mERASED - no old data found at the checked points\e[0m\n'; res="ERASED"
 elif [ "$M" = 1 ]; then
   printf '  Result   : \e[1;33mpartitions removed, old data still readable at %d points\e[0m\n' "$same"; res="partitions removed (data still readable)"
