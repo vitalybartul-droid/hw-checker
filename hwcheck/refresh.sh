@@ -95,6 +95,9 @@ if lsblk -lnpo MOUNTPOINT "$dev" | grep -q .; then echo; echo "  A partition of 
 # O_DIRECT so we really read/write the disk, not the RAM cache (fallback if the adapter refuses)
 ID=iflag=direct; OD=oflag=direct
 dd if="$dev" of=/dev/null bs=1M count=1 iflag=direct status=none 2>/dev/null || { ID=""; OD=""; }
+# without direct I/O the check read would come from the RAM cache and prove nothing:
+# flush + drop this disk's cache before every check read
+nocache() { [ -n "$ID" ] || blockdev --flushbufs "$dev" 2>/dev/null; }
 
 if [ $MODE = slow ]; then list=$(sort -n -u "$SLOWF"); else list=$(seq 0 $(( total - 1 ))); fi
 todo=$(printf '%s\n' "$list" | grep -c .)
@@ -129,12 +132,12 @@ for b in $list; do
     stop=1; break
   fi
   t0=$(date +%s%N)
-  sum2=$( ( trap '' INT; dd if="$dev" bs=1M count=$n skip=$(( b*CH )) $ID status=none 2>/dev/null ) | md5sum )
+  nocache; sum2=$( ( trap '' INT; dd if="$dev" bs=1M count=$n skip=$(( b*CH )) $ID status=none 2>/dev/null ) | md5sum )
   t1=$(date +%s%N); r2ms=$(( r2ms + (t1-t0)/1000000 ))
   if [ "$sum1" != "$sum2" ]; then
     # one more try with the copy still in RAM; if it still differs, stop at once
     ( trap '' INT; dd if="$BUF" of="$dev" bs=1M count=$n seek=$(( b*CH )) $OD conv=notrunc,fsync status=none 2>/dev/null )
-    sum2=$( ( trap '' INT; dd if="$dev" bs=1M count=$n skip=$(( b*CH )) $ID status=none 2>/dev/null ) | md5sum )
+    nocache; sum2=$( ( trap '' INT; dd if="$dev" bs=1M count=$n skip=$(( b*CH )) $ID status=none 2>/dev/null ) | md5sum )
     if [ "$sum1" != "$sum2" ]; then
       vfail=$((vfail+1)); cp "$BUF" "/tmp/refresh-block-$b.bin" 2>/dev/null
       printf '\e[?25h\n\n  \e[1;37;41m STOPPED: block at %s GB reads back DIFFERENT from what was written. \e[0m\n' "$(( b*CH/1024 ))"
@@ -167,7 +170,7 @@ elif [ $werr -gt 0 ]; then res="STOPPED - write error, disk is failing; the bloc
 elif [ $unread -gt 0 ]; then res="done with $unread unreadable block(s) skipped - disk is failing"
 elif [ $stop = 1 ]; then res="stopped by user"
 else res="done, no errors"; fi
-[ -n "$ID" ] || echo "  Note         : the adapter refused direct I/O - speeds include the RAM cache."
+[ -n "$ID" ] || echo "  Note         : the adapter refused direct I/O - speeds include the RAM cache; the check reads ran after flushing it."
 printf '  Result       : \e[1m%s\e[0m\n' "$res"
 echo "  Next         : run F (full scan) again and compare the map."
 report_add "Refresh      : $dev $model - $([ $MODE = slow ] && echo "slow zones ($todo blocks)" || echo "whole disk") - read ${sp1} -> ${sp2} MB/s - $res"

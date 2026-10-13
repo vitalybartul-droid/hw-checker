@@ -95,6 +95,9 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   build, and a note when it differs from the BIOS key. SUMMARY shows "Windows key: Pro" instead of "yes".
   The group -> edition table holds only facts (group number, edition id) from Microsoft's OEM:DM key
   configuration for Windows 8-11.
+  Also: Remap zeroes a sector only after 3 failed reads (a timeout / USB reset is not a bad sector);
+  Refresh without direct I/O flushes the disk cache before each check read; every scan (quick too)
+  records which disk its lists belong to; NTFS partitions under 16 GB are skipped when looking for Windows.
 
 ## Priority 1
 

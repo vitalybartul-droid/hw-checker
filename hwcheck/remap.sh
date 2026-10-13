@@ -96,7 +96,12 @@ for r in "${regions[@]}"; do
     if ! readsec $s $n; then
       gone && { lost=1; break 2; }
       for (( x = s; x < s + n && stop == 0; x++ )); do
+        # a single failed read can be a timeout or a USB reset, not a bad sector: try 3 times,
+        # and zero the sector only if it fails every time (and the disk is still there)
         readsec $x && continue
+        gone && { lost=1; break 3; }
+        sleep 0.2; readsec $x && continue
+        sleep 0.5; readsec $x && continue
         gone && { lost=1; break 3; }
         bad=$((bad+1))
         ( trap '' INT; dd if=/dev/zero of="$dev" bs=$PB count=1 seek=$(( AO + x * PB )) oflag=direct,seek_bytes conv=notrunc,fsync status=none 2>/dev/null )

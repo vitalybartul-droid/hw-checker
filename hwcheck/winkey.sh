@@ -123,6 +123,8 @@ installed)
     [ "$fs" = ntfs ] || continue
     [ -n "$BOOTDISK" ] && [ "/dev/$pk" = "$BOOTDISK" ] && continue
     findmnt -rn -S "$p" >/dev/null 2>&1 && continue                 # already mounted (rescue): skip
+    # Windows itself needs > 15 GB: skip recovery / EFI-size NTFS partitions (fewer mounts, faster report)
+    [ "$(blockdev --getsize64 "$p" 2>/dev/null || echo 0)" -ge 16000000000 ] || continue
     dd if="$p" bs=512 count=1 2>/dev/null | grep -qa 'FVE-FS-' && { echo "$p|BitLocker-encrypted|||||"; continue; }
     { mount -t ntfs3 -o ro "$p" "$MNT" 2>/dev/null || mount -t ntfs-3g -o ro "$p" "$MNT" 2>/dev/null; } || continue
     h="$MNT/Windows/System32/config/SOFTWARE"

@@ -130,7 +130,11 @@ scan() {
   SLOWF=/tmp/scan-$DN.slow; : > "$SLOWF.tmp"
   BADF=/tmp/scan-$DN.bad; : > "$BADF"            # unreadable blocks, for Remap (M): only from THIS scan
   # which physical disk the lists belong to: sdb today may be another disk after a swap
-  [ "$1" = full ] && disk_id "$dev" > "/tmp/scan-$DN.id"
+  # every scan (quick too) rewrites .bad, so every scan records whose lists these are; a slow list
+  # left by a full scan of ANOTHER disk under the same name is dropped
+  local nid; nid=$(disk_id "$dev")
+  [ "$(cat "/tmp/scan-$DN.id" 2>/dev/null)" = "$nid" ] || rm -f "$SLOWF"
+  echo "$nid" > "/tmp/scan-$DN.id"
   START=$(date +%s); alerts=""
   local stop=0 lost=0
   trap 'stop=1' INT                             # Ctrl+C ends the scan but still prints the result
