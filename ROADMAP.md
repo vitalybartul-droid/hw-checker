@@ -89,6 +89,13 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
   at the first write error and keeps the block's copy. Password reset asks which Windows when there
   are several. `build-iso.sh` refuses to build without the exact pinned, hash-checked .debs.
 
+- **v2.1** — **Windows edition** in the report: the BIOS (MSDM) key is decoded offline (key group +
+  checksum, so a garbled key is detected) and its edition shown (Home / Home Single Language / Pro /
+  Education ...); Windows already on the disks is read from its registry (read-only): name, version,
+  build, and a note when it differs from the BIOS key. SUMMARY shows "Windows key: Pro" instead of "yes".
+  The group -> edition table holds only facts (group number, edition id) from Microsoft's OEM:DM key
+  configuration for Windows 8-11.
+
 ## Priority 1
 
 - **Disk WRITE test (destructive, for disks being wiped)** — in `D`, double confirmation + typed word:

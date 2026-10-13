@@ -301,12 +301,31 @@ if [ -n "$tpm" ]; then echo "TPM           : $tpm.0"
 elif [ -e /sys/class/tpm/tpm0 ]; then echo "TPM           : present (1.2?)"
 else echo "TPM           : not found (disabled in BIOS?)"; fi
 
-echo; echo "================ WINDOWS KEY (BIOS) ================"
+echo; echo "================ WINDOWS ================"
+WK="$(dirname "$(readlink -f "$0")")/winkey.sh"
+okey=""; ked=""
 if [ -r /sys/firmware/acpi/tables/MSDM ]; then
-  echo "OEM key       : $(tail -c 29 /sys/firmware/acpi/tables/MSDM)"
+  okey=$(tail -c 29 /sys/firmware/acpi/tables/MSDM | tr -cd 'A-Z0-9-')
+  echo "OEM key       : $okey"
+  IFS='|' read -r kg ks kck ked kname < <(bash "$WK" decode "$okey" 2>/dev/null)
+  if [ "$kck" != ok ]; then echo "Key edition   : cannot be read (key checksum wrong - damaged MSDM table?)"; ked=""
+  elif [ "$ked" = "?" ] || [ -z "$ked" ]; then echo "Key edition   : unknown (key group $kg) - Windows setup will pick it by itself"; ked=""
+  else echo "Key edition   : Windows $kname   (OEM key group $kg)"; fi
 else
   echo "OEM key       : none (no MSDM table)"
 fi
+# Windows already on the internal disks (read-only look into its registry)
+nwin=0
+while IFS='|' read -r wp wn wed wdv wbn wbk; do
+  [ -n "$wp" ] || continue; nwin=$((nwin+1))
+  if [ "$wn" = BitLocker-encrypted ]; then echo "Installed     : $wp: BitLocker-encrypted, edition unknown"; continue; fi
+  echo "Installed     : $wp: $wn${wdv:+ $wdv}${wbn:+ (build $wbn)}"
+  if [ -n "$ked" ] && [ -n "$wed" ] && [ "$wed" != "$ked" ]; then
+    echo "                ^ differs from the BIOS key ($(bash "$WK" nice "$ked")): a clean install with the BIOS key gives $(bash "$WK" nice "$ked")"
+  fi
+  [ -n "$okey" ] && [ "$wbk" = "$okey" ] && echo "                  (its registry holds the same key as the BIOS)"
+done < <(bash "$WK" installed 2>/dev/null)
+[ $nwin = 0 ] && echo "Installed     : no Windows found on the disks"
 
 echo; echo "================ CPU ================"
 cpu=$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)
@@ -591,7 +610,7 @@ colorize() {
     -e 's/^( *[A-Za-z][^:=]{0,16}: )(.*)$/\1\x1b[1m\2\x1b[0m/' \
     -e 's/(PASSED|passed|Completed without error)/\x1b[32m\1\x1b[39m/g' \
     -e 's/(FAILED|FAILURE|ERROR|!!![^!]*!!!)/\x1b[1;31m\1\x1b[39m/g' \
-    -e 's/(not found|empty|none \(no MSDM table\)|not reported|not run[^,]*)/\x1b[2m\1\x1b[22m/g' \
+    -e 's/(not found|empty|none \(no MSDM table\)|no Windows found on the disks|not reported|not run[^,]*)/\x1b[2m\1\x1b[22m/g' \
     "$1"
 }
 
@@ -612,6 +631,7 @@ summary() {
   gpu=$(sed -n '/= GPU =/,/= DISPLAY =/p' "$f" | grep -E '^  (NVIDIA|Advanced Micro|AMD)' | sed -E 's/.*\[([^]]+)\].*/\1/' | head -1)
   bh=$(sed -n '/= BATTERY =/,$s/.*health \([0-9]*\)%.*/\1/p' "$f" | head -1)
   grep -q '^OEM key *: [A-Z0-9]\{5\}-' "$f" && key=yes || key=no
+  v=$(sed -n 's/^Key edition *: Windows \(.*\)   (OEM.*/\1/p' "$f" | head -1); [ -n "$v" ] && [ $key = yes ] && key=$v
 
   # ---- problems ----
   if [ -n "$bh" ]; then
