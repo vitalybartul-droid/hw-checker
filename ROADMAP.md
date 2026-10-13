@@ -27,16 +27,6 @@ LAN / LTE drivers and firmware, `iw`, `ethtool`, `iputils-ping` — the report m
 Wi-Fi standard, bands and all network details. Only things not used for hardware info are cut
 (NetworkManager GUI bits, desktop, docs, extra locales).
 
-## Next (v1.2) — found while testing v1.1
-
-- **Keyboard test text is too small on HiDPI screens** (key labels hard to read on 3200x2000).
-  `kbdtest.sh` picks the largest Terminus font at which the layout still fits (~115 columns x
-  ~16 rows), like the report's auto-scaling, and restores the report font on exit.
-  No manual +/- inside the test: those keys are being tested.
-- **Webcam line duplicated and truncated** — the camera exposes two USB interfaces; show the
-  device name once.
-- **Hide "Socket: Other"** (meaningless on laptops with soldered CPUs).
-
 ## Done
 
 - **v1.1** — ISO trimmed to ~1.4 GB; Enter-twice power off; disk-test progress kept out of the
@@ -82,7 +72,7 @@ Wi-Fi standard, bands and all network details. Only things not used for hardware
 - **v2.0.1** — safety fixes after a code review. Erase is green "ERASED" only if the method really
   finished and all 64 points could be read back (otherwise NOT COMPLETE / UNKNOWN); overwrite, quick
   wipe, full scan and the fingerprint reach the very last sector. Erase / Remap / Refresh refuse to
-  write anywhere if the ViCheck stick cannot be identified (also works for CD/VM and Ventoy boot).
+  write anywhere if the ViCheck stick cannot be identified (CD/VM boot too; Ventoy only since v2.1.1).
   Remap: SMART LBAs in logical sectors, kernel sectors in 512 B, alignment offset honoured; aborts if
   a partition stays mounted. Scan lists are cleared per scan and tied to the disk (model + serial +
   size), so a different disk on the same /dev name is never refreshed/remapped by them. Refresh stops

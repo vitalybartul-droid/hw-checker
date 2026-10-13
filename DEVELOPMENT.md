@@ -43,6 +43,7 @@ take every `debs/*.deb`, so two versions of one package must never sit there tog
 ## Build a release ISO
 
 ```bash
+tools/get-debs.sh            # once / after a .deb pin changes; --check only verifies
 tools/build-iso.sh ../_images/debian-live-13.7.0-amd64-standard.iso
 # -> vicheck-<git describe>-debian-13.7.0.iso
 ```

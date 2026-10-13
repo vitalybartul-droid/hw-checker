@@ -63,15 +63,17 @@ Microsoft (online) accounts cannot be reset.
 ### Build the ISO yourself
 
 ```bash
+tools/get-debs.sh          # pinned, hash-checked extra .debs (not in git)
 tools/build-iso.sh debian-live-13.7.0-amd64-standard.iso
 ```
 
 Takes the official [Debian Live](https://www.debian.org/CD/live/) *standard* ISO,
 adds `hwcheck/` and the boot hook, patches the boot menu, drops the Debian installer
 (~0.6 GB, not needed on a test stick), and replays Debian's
-boot setup so the hybrid ISO and Secure Boot keep working. Needs `xorriso`.
+boot setup so the hybrid ISO and Secure Boot keep working. Needs `xorriso`, `curl`, `sha256sum`.
+`build-iso.sh` refuses to build if the .debs are missing or do not match their hashes.
 
-Ventoy is not recommended: with Secure Boot on it needs its key enrolled on every machine.
+Ventoy works since v2.1.1, but is not recommended: with Secure Boot on it needs its key enrolled on every machine.
 
 ## Repository layout
 
